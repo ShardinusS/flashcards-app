@@ -483,7 +483,6 @@ const App = {
     
     hamburgerMenuAction(index) {
         if (this.currentMenuActions && this.currentMenuActions[index]) {
-            this.vibrate();
             this.currentMenuActions[index]();
         }
     },
@@ -714,7 +713,6 @@ const App = {
                     e.stopPropagation();
                     const name = document.getElementById('deck-name').value.trim();
                     if (name) {
-                        this.vibrate();
                         this.createDeck(name);
                         this.hideModal();
                     }
@@ -753,7 +751,6 @@ const App = {
                     e.stopPropagation();
                     const name = document.getElementById('edit-deck-name').value.trim();
                     if (name) {
-                        this.vibrate();
                         this.updateDeck(name);
                         this.hideModal();
                     }
@@ -791,7 +788,6 @@ const App = {
                     e.stopPropagation();
                     const cardsPerSession = parseInt(document.getElementById('cards-per-session').value);
                     if (cardsPerSession > 0 && cardsPerSession <= 100) {
-                        this.vibrate();
                         this.cardsPerSession = cardsPerSession;
                         // Sauvegarder dans localStorage
                         localStorage.setItem('flashcards_cardsPerSession', cardsPerSession.toString());
@@ -1057,7 +1053,6 @@ const App = {
                         return;
                     }
                     
-                    this.vibrate();
                     await this.createCard(front, back, imageData.front, imageData.back);
                     this.hideModal();
                 };
@@ -1244,7 +1239,6 @@ const App = {
                         return;
                     }
                     
-                    this.vibrate();
                     await this.updateCard(cardIndex, front, back, editImageData.front, editImageData.back);
                     this.hideModal();
                 };
@@ -1282,7 +1276,6 @@ const App = {
     
     deleteDeck(id) {
         if (confirm('Êtes-vous sûr de vouloir supprimer ce deck ?')) {
-            this.vibrate();
             Storage.deleteDeck(id);
             if (this.currentDeckId === id) {
                 this.showDecksView();
@@ -1368,7 +1361,6 @@ const App = {
     deleteCard(index) {
         if (!this.currentDeckId) return;
         if (confirm('Êtes-vous sûr de vouloir supprimer cette carte ?')) {
-            this.vibrate();
             const deck = Storage.getDeck(this.currentDeckId);
             if (deck && deck.cards[index]) {
                 deck.cards.splice(index, 1);
@@ -1962,7 +1954,6 @@ const App = {
                             if (!confirm('Un rappel existe déjà pour ce deck. Voulez-vous le remplacer ?')) {
                                 return;
                             }
-                            this.vibrate();
                         }
                         
                         // Demander la permission si nécessaire
@@ -1972,7 +1963,6 @@ const App = {
                         }
                         
                         if (!existingReminder) {
-                            this.vibrate();
                         }
                         const deck = Storage.getDeck(deckId);
                         const deckName = deck ? deck.name : deckSelect.options[deckSelect.selectedIndex].dataset.name;
@@ -2118,7 +2108,6 @@ const App = {
                 const reminder = reminders.find(r => r.deckId === deckId);
                 
                 if (reminder && confirm(`Supprimer le rappel pour "${reminder.deckName || 'ce deck'}" ?`)) {
-                    this.vibrate();
                     if (this.serviceWorkerRegistration && this.serviceWorkerRegistration.active) {
                         this.serviceWorkerRegistration.active.postMessage({
                             type: 'REMOVE_REMINDER',
@@ -2280,258 +2269,6 @@ const App = {
     isIOS() {
         const userAgent = navigator.userAgent || navigator.vendor || window.opera;
         return /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
-    },
-    
-    // Vérifier si l'API de vibration est disponible et fonctionnelle
-    canVibrate() {
-        return 'vibrate' in navigator && typeof navigator.vibrate === 'function';
-    },
-    
-    // Fonction de test pour vérifier si les vibrations fonctionnent
-    // À appeler depuis la console : App.testVibration()
-    testVibration() {
-        console.log('=== Test de vibration haptique ===');
-        console.log('User Agent:', navigator.userAgent);
-        console.log('Est iOS:', this.isIOS());
-        console.log('Est Mobile:', this.isMobile());
-        console.log('API vibrate disponible:', this.canVibrate());
-        
-        // Détecter si on est sur desktop (Windows, Mac, Linux)
-        const isDesktop = !this.isMobile() && (
-            navigator.userAgent.includes('Windows') ||
-            navigator.userAgent.includes('Macintosh') ||
-            navigator.userAgent.includes('Linux') ||
-            navigator.userAgent.includes('X11')
-        );
-        
-        if (isDesktop) {
-            console.warn('⚠️ Vous êtes sur un ordinateur de bureau');
-            console.warn('Les ordinateurs de bureau n\'ont généralement pas de moteur de vibration.');
-            console.warn('Même si navigator.vibrate() retourne true, vous ne sentirez pas de vibration.');
-            console.warn('');
-            console.warn('Pour tester les vibrations, utilisez:');
-            console.warn('- Un téléphone Android avec Chrome');
-            console.warn('- Un iPhone avec Safari (iOS 18+ / Safari 17.4+)');
-            console.warn('');
-        }
-        
-        if (this.isIOS()) {
-            console.log('Mode: iOS - Utilisation du workaround avec switch');
-            console.log('Test du feedback haptique iOS...');
-            
-            // Test du hack iOS avec debug activé
-            this.tryIOSHapticFeedback(true);
-            
-            console.log('');
-            console.log('✅ Si vous avez senti une vibration, le hack iOS fonctionne !');
-            console.log('❌ Si aucune vibration, le hack ne fonctionne pas sur cette version d\'iOS/Safari');
-            console.log('Note: Nécessite iOS 18+ / Safari 17.4+ pour fonctionner');
-        } else if (this.canVibrate()) {
-            console.log('Mode: Android/Chrome - Utilisation de navigator.vibrate()');
-            console.log('Test de navigator.vibrate(200)...');
-            
-            try {
-                const result = navigator.vibrate(200);
-                console.log('Résultat:', result);
-                
-                if (result === false) {
-                    console.warn('⚠️ navigator.vibrate() a retourné false');
-                    console.warn('Cela peut signifier:');
-                    console.warn('- Pas d\'interaction utilisateur préalable');
-                    console.warn('- Permissions refusées');
-                    console.warn('- API non supportée sur cet appareil');
-                } else {
-                    if (isDesktop) {
-                        console.log('⚠️ navigator.vibrate() a retourné true, mais sur desktop,');
-                        console.log('   vous ne sentirez pas de vibration physique.');
-                        console.log('   Testez sur un appareil mobile pour sentir la vibration.');
-                    } else {
-                        console.log('✅ Vibration déclenchée ! Vous devriez sentir une vibration de 200ms');
-                        console.log('   Si vous ne sentez rien, vérifiez que votre appareil a un moteur de vibration.');
-                    }
-                }
-            } catch (e) {
-                console.error('❌ Erreur lors de la vibration:', e);
-            }
-        } else {
-            console.warn('⚠️ Aucune méthode de vibration disponible');
-            console.warn('Vous êtes probablement sur un desktop ou un navigateur qui ne supporte pas les vibrations');
-        }
-        
-        console.log('');
-        console.log('=== Fin du test ===');
-        console.log('');
-        console.log('💡 Pour tester réellement les vibrations:');
-        console.log('   1. Ouvrez l\'application sur un téléphone');
-        console.log('   2. Cliquez sur un bouton (Créer, Ajouter, etc.)');
-        console.log('   3. Vous devriez sentir une vibration');
-    },
-    
-    // Vibration de validation (pour iPhone et Android)
-    // Note: iOS Safari ne supporte pas navigator.vibrate()
-    // On utilise un workaround avec un input switch qui déclenche le feedback haptique
-    // IMPORTANT: Ce hack n'est pas fiable à 100% car iOS ne permet pas officiellement
-    // les vibrations dans les PWA. Pour une solution fiable, il faut une app native.
-    // 
-    // IMPORTANT: navigator.vibrate() nécessite une interaction utilisateur préalable
-    // (clic, toucher, etc.) pour fonctionner. Si la vibration ne fonctionne pas,
-    // c'est probablement parce qu'elle est appelée avant une interaction utilisateur.
-    vibrate(duration = 50) {
-        const isIOS = this.isIOS();
-        const isMobile = this.isMobile();
-        
-        // Pour Android/Chrome mobile et autres appareils qui supportent navigator.vibrate
-        if (!isIOS && this.canVibrate()) {
-            try {
-                // Essayer de vibrer (fonctionne sur Android/Chrome mobile)
-                // Note: navigator.vibrate() nécessite une interaction utilisateur préalable
-                // Si elle est appelée dans un gestionnaire d'événement utilisateur, elle devrait fonctionner
-                const result = navigator.vibrate(duration);
-                
-                // navigator.vibrate() retourne:
-                // - true: la vibration a été acceptée
-                // - false: la vibration a été refusée (pas d'interaction utilisateur ou permissions)
-                // - undefined: la vibration a été acceptée (comportement selon navigateur)
-                
-                // Si ça retourne false, l'API n'est pas disponible ou a été refusée
-                if (result === false) {
-                    // Sur mobile mais API refusée, essayer quand même le hack iOS
-                    if (isMobile) {
-                        this.tryIOSHapticFeedback();
-                    }
-                }
-                // Si result est true ou undefined, la vibration a été acceptée
-                return;
-            } catch (e) {
-                // Si erreur et on est sur mobile, essayer le hack iOS
-                if (isMobile) {
-                    this.tryIOSHapticFeedback();
-                }
-                return;
-            }
-        }
-        
-        // Pour iOS : utiliser le workaround avec input switch
-        if (isIOS) {
-            // Passer true pour activer le mode debug (peut être activé via App.debugHaptics = true)
-            this.tryIOSHapticFeedback(this.debugHaptics || false);
-        }
-    },
-    
-    // Workaround pour iOS : utiliser un input switch avec label
-    // 
-    // Inspiré de ios-haptics (librairie JavaScript populaire)
-    // Documentation ios-haptics : "this uses the <input type="checkbox" switch /> 
-    // (introduit avec Safari 17.4), which has haptic feedback when toggled."
-    // 
-    // iOS 18+ / Safari 17.4+ : WebKit a ajouté un feedback haptique non-standard
-    // pour les switches de formulaire. Même caché, un switch toggle déclenche
-    // un léger haptique dans les PWAs.
-    // 
-    // Technique confirmée par la communauté Reddit : switch + label + click fonctionne
-    // dans les PWAs iOS 18+ après un tap utilisateur sur le label.
-    // 
-    // Références:
-    // - ios-haptics library (GitHub)
-    // - https://iifx.dev/articles/ios-haptics-in-pwa
-    // - Reddit discussions sur iOS 18+ PWA haptics
-    tryIOSHapticFeedback(debug = false) {
-        try {
-            if (debug) {
-                console.log('[Haptic Debug] Création du switch iOS...');
-            }
-            
-            // Créer un input switch temporaire, légèrement visible mais hors écran
-            const switchInput = document.createElement('input');
-            switchInput.type = 'checkbox';
-            switchInput.id = 'haptic-switch-' + Date.now();
-            switchInput.checked = false;
-            
-            if (debug) {
-                console.log('[Haptic Debug] Switch créé avec ID:', switchInput.id);
-            }
-            
-            // Style: minuscule, très légèrement visible (opacity > 0), hors écran
-            // iOS 18+ déclenche le haptique même si l'élément est caché,
-            // mais opacity > 0 augmente les chances de succès
-            switchInput.style.cssText = `
-                position: absolute;
-                width: 1px;
-                height: 1px;
-                opacity: 0.01;
-                left: -10px;
-                top: -10px;
-                pointer-events: none;
-                margin: 0;
-                padding: 0;
-                appearance: none;
-                -webkit-appearance: none;
-            `;
-            
-            // Créer un label associé (technique recommandée par ios-haptics)
-            // Sur iOS 18+, un tap sur le label associé déclenche mieux le haptique
-            const switchLabel = document.createElement('label');
-            switchLabel.htmlFor = switchInput.id;
-            switchLabel.setAttribute('for', switchInput.id); // Double association pour compatibilité
-            switchLabel.style.cssText = `
-                position: absolute;
-                width: 1px;
-                height: 1px;
-                opacity: 0.01;
-                left: -10px;
-                top: -10px;
-                pointer-events: none;
-                margin: 0;
-                padding: 0;
-            `;
-            
-            // Ajouter au DOM
-            document.body.appendChild(switchInput);
-            document.body.appendChild(switchLabel);
-            
-            // Technique principale : Toggle direct du switch
-            // Safari 17.4+ / iOS 18+ déclenche le haptique lors du toggle
-            try {
-                switchInput.focus();
-            } catch (e) {
-                // Ignorer si focus échoue
-            }
-            
-            // Toggle pour déclencher le feedback haptique
-            // C'est la technique principale documentée par ios-haptics
-            switchInput.checked = !switchInput.checked;
-            
-            // Technique alternative : Simuler un clic sur le label
-            // Certains développeurs rapportent que cette méthode fonctionne mieux
-            // sur iOS 18+ dans les PWAs, surtout après un tap utilisateur réel
-            setTimeout(() => {
-                try {
-                    // Créer un événement de clic réaliste
-                    const clickEvent = new MouseEvent('click', {
-                        bubbles: true,
-                        cancelable: true,
-                        view: window,
-                        detail: 1,
-                        buttons: 1
-                    });
-                    switchLabel.dispatchEvent(clickEvent);
-                } catch (e) {
-                    // Ignorer si dispatchEvent échoue
-                }
-            }, 10);
-            
-            // Retirer du DOM rapidement
-            setTimeout(() => {
-                if (switchInput.parentNode) {
-                    switchInput.remove();
-                }
-                if (switchLabel.parentNode) {
-                    switchLabel.remove();
-                }
-            }, 100);
-        } catch (e) {
-            // Ignorer silencieusement les erreurs
-        }
     },
     
     // Détecter si on est sur Windows
