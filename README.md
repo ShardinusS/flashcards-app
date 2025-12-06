@@ -1,4 +1,4 @@
-# FlashCards - Application PWA de Révision
+# ShardCards - Application PWA de Révision
 
 Application web complète de flashcards avec répétition espacée, inspirée d'AnkiApp. Fonctionne comme PWA sur iPhone et autres appareils.
 
@@ -11,8 +11,8 @@ Application web complète de flashcards avec répétition espacée, inspirée d'
 ├── script.js           # Logique de l'application
 ├── manifest.json       # Configuration PWA
 ├── service-worker.js   # Service Worker pour cache offline
-├── icon-192.png       # Icône 192x192 (à créer)
-├── icon-512.png       # Icône 512x512 (à créer)
+├── icon-192.png       # Icône 192x192
+├── icon-1024.png      # Icône 1024x1024 (Apple)
 └── README.md          # Ce fichier
 ```
 
@@ -25,14 +25,14 @@ Application web complète de flashcards avec répétition espacée, inspirée d'
    git init
    git add .
    git commit -m "Initial commit"
-   git remote add origin https://github.com/votre-username/flashcards.git
+   git remote add origin https://github.com/votre-username/shardcards.git
    git push -u origin main
    ```
 
 2. **Activer GitHub Pages**
    - Allez dans Settings > Pages
    - Sélectionnez la branche `main` et le dossier `/ (root)`
-   - L'application sera disponible à `https://votre-username.github.io/flashcards/`
+   - L'application sera disponible à `https://votre-username.github.io/shardcards/`
 
 ### Option 2 : Netlify
 
@@ -93,51 +93,25 @@ Puis ouvrez `http://localhost:8000` dans votre navigateur.
 
 ## 🎨 Création des icônes
 
-Pour que la PWA fonctionne correctement, vous devez créer deux fichiers d'icônes :
+Pour que la PWA fonctionne correctement, vous devez créer les fichiers d'icônes suivants :
 
-- `icon-192.png` (192x192 pixels)
-- `icon-512.png` (512x512 pixels)
+- `icon-192.png` (192x192 pixels) - Pour Android et PWA standard
+- `icon-1024.png` (1024x1024 pixels) - Pour Apple (iPhone/iPad), remplit tout l'espace sans contour blanc
 
-### Méthode 1 : Outil en ligne
-1. Créez une icône carrée (fond bleu #2196F3 avec un symbole de carte 🃏)
+**Note :** Utilisez le fichier `generate-icons.html` inclus dans le projet pour générer automatiquement toutes les icônes à partir de votre logo.
+
+### Méthode recommandée : Générateur intégré
+1. Ouvrez `generate-icons.html` dans votre navigateur
+2. Uploadez votre logo (format carré recommandé pour Apple)
+3. Téléchargez les icônes générées
+4. Placez-les dans le dossier racine du projet
+
+**Note :** L'icône Apple (1024x1024) utilise le mode "cover" pour remplir tout l'espace et éviter le contour blanc sur l'écran d'accueil.
+
+### Méthode alternative : Outil en ligne
+1. Créez une icône carrée avec votre logo
 2. Utilisez un outil comme [PWA Asset Generator](https://github.com/onderceylan/pwa-asset-generator) ou [RealFaviconGenerator](https://realfavicongenerator.net/)
 3. Téléchargez les icônes et placez-les dans le dossier racine
-
-### Méthode 2 : Outil de design
-- Utilisez Figma, Canva, ou Photoshop
-- Créez une icône 512x512 avec fond bleu #2196F3
-- Exportez en PNG aux tailles 192x192 et 512x512
-
-### Méthode 3 : Script simple (Node.js)
-Créez un fichier `generate-icons.js` :
-```javascript
-const fs = require('fs');
-const { createCanvas } = require('canvas');
-
-function createIcon(size) {
-  const canvas = createCanvas(size, size);
-  const ctx = canvas.getContext('2d');
-  
-  // Fond bleu
-  ctx.fillStyle = '#2196F3';
-  ctx.fillRect(0, 0, size, size);
-  
-  // Symbole de carte (texte simple)
-  ctx.fillStyle = 'white';
-  ctx.font = `bold ${size * 0.4}px Arial`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('🃏', size / 2, size / 2);
-  
-  return canvas.toBuffer('image/png');
-}
-
-fs.writeFileSync('icon-192.png', createIcon(192));
-fs.writeFileSync('icon-512.png', createIcon(512));
-console.log('Icônes créées !');
-```
-
-Puis exécutez : `node generate-icons.js`
 
 ## 📦 Import / Export JSON
 

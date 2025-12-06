@@ -1,6 +1,6 @@
 {
-  "name": "FlashCards - AnkiApp Style",
-  "short_name": "FlashCards",
+  "name": "ShardCards - AnkiApp Style",
+  "short_name": "ShardCards",
   "description": "Application de flashcards avec répétition espacée",
   "start_url": "./index.html",
   "scope": "./",
