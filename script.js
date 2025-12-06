@@ -247,8 +247,31 @@ const App = {
         this.renderDecks();
         this.registerServiceWorker();
         
+        // Restaurer les rappels de révision si configurés
+        this.restoreReviewReminders();
+        
         // Afficher le popup d'aide lors de la première visite
         this.checkFirstVisit();
+    },
+    
+    // Restaurer les rappels de révision au chargement
+    restoreReviewReminders() {
+        const savedConfig = localStorage.getItem('flashcards_reminder_config');
+        if (savedConfig) {
+            const config = JSON.parse(savedConfig);
+            if (config.enabled && this.serviceWorkerRegistration && this.serviceWorkerRegistration.active) {
+                // Attendre que le service worker soit prêt
+                setTimeout(() => {
+                    if (this.serviceWorkerRegistration.active) {
+                        this.serviceWorkerRegistration.active.postMessage({
+                            type: 'SCHEDULE_REVIEW_REMINDER',
+                            time: config.time,
+                            frequency: config.frequency
+                        });
+                    }
+                }, 1000);
+            }
+        }
     },
     
     initIcons() {
@@ -348,9 +371,19 @@ const App = {
         this.showView('review');
         
         // Attendre que la vue soit complètement affichée avant de rendre la carte
-        setTimeout(() => {
-            this.renderReviewCard();
-        }, 10);
+        // Utiliser requestAnimationFrame pour s'assurer que le DOM est prêt
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                // Vérifier à nouveau que les cartes sont toujours disponibles
+                if (this.reviewCards && this.reviewCards.length > 0) {
+                    this.renderReviewCard();
+                } else {
+                    console.error('Les cartes de révision ont été perdues');
+                    // Retourner à la vue du deck si les cartes ne sont plus disponibles
+                    this.showDeckDetailView();
+                }
+            }, 50);
+        });
     },
     
     toggleView() {
@@ -381,6 +414,10 @@ const App = {
                 }},
                 { icon: this.isGridView ? 'list' : 'grid', text: this.isGridView ? 'Vue liste' : 'Vue grille', action: () => {
                     this.toggleView();
+                }},
+                { icon: 'settings', text: 'Rappels de révision', action: () => {
+                    this.configureReviewReminders();
+                    this.hideHamburgerMenu();
                 }},
             ];
         } else if (viewType === 'deck-detail') {
@@ -1245,9 +1282,27 @@ const App = {
             return;
         }
         
+        // Vérifier que reviewCards est initialisé et contient des cartes
+        if (!this.reviewCards || this.reviewCards.length === 0) {
+            console.error('Aucune carte à réviser');
+            return;
+        }
+        
+        // Vérifier que l'index est valide
+        if (this.currentReviewIndex < 0 || this.currentReviewIndex >= this.reviewCards.length) {
+            console.error('Index de révision invalide:', this.currentReviewIndex);
+            return;
+        }
+        
         // Restaurer la structure HTML si elle a été modifiée
         const reviewCard = document.getElementById('review-card');
-        if (reviewCard && !reviewCard.querySelector('#card-front')) {
+        if (!reviewCard) {
+            console.error('Élément review-card non trouvé');
+            return;
+        }
+        
+        // Toujours réinitialiser la structure pour éviter les problèmes après rafraîchissement
+        if (!reviewCard.querySelector('#card-front') || !reviewCard.querySelector('#front-content')) {
             reviewCard.innerHTML = `
                 <div id="card-front" class="card-side">
                     <div id="review-card-color-band" class="review-card-color-band"></div>
@@ -1262,7 +1317,10 @@ const App = {
         }
         
         const card = this.reviewCards[this.currentReviewIndex];
-        if (!card) return;
+        if (!card) {
+            console.error('Carte non trouvée à l\'index', this.currentReviewIndex);
+            return;
+        }
         
         const total = this.reviewCards.length;
         const current = this.currentReviewIndex + 1;
@@ -1280,61 +1338,67 @@ const App = {
         const colorBandBack = document.getElementById('review-card-color-band-back');
         
         // Construire le contenu de la question avec image et/ou texte
-        if (frontContent) {
-            let frontHtml = '';
-            const hasFrontImage = card.frontImage && (typeof card.frontImage === 'string') && card.frontImage.trim() !== '';
-            const hasFrontText = card.front && (typeof card.front === 'string') && card.front.trim() !== '';
-            
-            if (hasFrontImage) {
-                frontHtml += `<div class="review-image-container" id="front-image-container"><img src="${card.frontImage}" alt="Question" class="review-image"></div>`;
-            }
-            if (hasFrontText) {
-                frontHtml += `<p class="review-text" id="front-text-element">${this.escapeHtml(card.front)}</p>`;
-            }
-            if (!frontHtml) {
-                frontHtml = '<p style="color: var(--text-secondary);">Aucun contenu pour la question</p>';
-            }
-            frontContent.innerHTML = frontHtml;
-            
-            // Appliquer la taille de texte proportionnelle si image et texte sont présents
-            if (hasFrontImage && hasFrontText) {
-                setTimeout(() => {
-                    const imageContainer = document.getElementById('front-image-container');
-                    const textElement = document.getElementById('front-text-element');
-                    if (imageContainer && textElement) {
-                        this.applyProportionalTextSize(imageContainer, textElement);
-                    }
-                }, 50);
-            }
+        if (!frontContent) {
+            console.error('Élément front-content non trouvé');
+            return;
+        }
+        
+        let frontHtml = '';
+        const hasFrontImage = card.frontImage && (typeof card.frontImage === 'string') && card.frontImage.trim() !== '';
+        const hasFrontText = card.front && (typeof card.front === 'string') && card.front.trim() !== '';
+        
+        if (hasFrontImage) {
+            frontHtml += `<div class="review-image-container" id="front-image-container"><img src="${card.frontImage}" alt="Question" class="review-image"></div>`;
+        }
+        if (hasFrontText) {
+            frontHtml += `<p class="review-text" id="front-text-element">${this.escapeHtml(card.front)}</p>`;
+        }
+        if (!frontHtml) {
+            frontHtml = '<p style="color: var(--text-secondary);">Aucun contenu pour la question</p>';
+        }
+        frontContent.innerHTML = frontHtml;
+        
+        // Appliquer la taille de texte proportionnelle si image et texte sont présents
+        if (hasFrontImage && hasFrontText) {
+            setTimeout(() => {
+                const imageContainer = document.getElementById('front-image-container');
+                const textElement = document.getElementById('front-text-element');
+                if (imageContainer && textElement) {
+                    this.applyProportionalTextSize(imageContainer, textElement);
+                }
+            }, 50);
         }
         
         // Construire le contenu de la réponse avec image et/ou texte
-        if (backContent) {
-            let backHtml = '';
-            const hasBackImage = card.backImage && (typeof card.backImage === 'string') && card.backImage.trim() !== '';
-            const hasBackText = card.back && (typeof card.back === 'string') && card.back.trim() !== '';
-            
-            if (hasBackImage) {
-                backHtml += `<div class="review-image-container" id="back-image-container"><img src="${card.backImage}" alt="Réponse" class="review-image"></div>`;
-            }
-            if (hasBackText) {
-                backHtml += `<p class="review-text" id="back-text-element">${this.escapeHtml(card.back)}</p>`;
-            }
-            if (!backHtml) {
-                backHtml = '<p style="color: var(--text-secondary);">Aucun contenu pour la réponse</p>';
-            }
-            backContent.innerHTML = backHtml;
-            
-            // Appliquer la taille de texte proportionnelle si image et texte sont présents
-            if (hasBackImage && hasBackText) {
-                setTimeout(() => {
-                    const imageContainer = document.getElementById('back-image-container');
-                    const textElement = document.getElementById('back-text-element');
-                    if (imageContainer && textElement) {
-                        this.applyProportionalTextSize(imageContainer, textElement);
-                    }
-                }, 50);
-            }
+        if (!backContent) {
+            console.error('Élément back-content non trouvé');
+            return;
+        }
+        
+        let backHtml = '';
+        const hasBackImage = card.backImage && (typeof card.backImage === 'string') && card.backImage.trim() !== '';
+        const hasBackText = card.back && (typeof card.back === 'string') && card.back.trim() !== '';
+        
+        if (hasBackImage) {
+            backHtml += `<div class="review-image-container" id="back-image-container"><img src="${card.backImage}" alt="Réponse" class="review-image"></div>`;
+        }
+        if (hasBackText) {
+            backHtml += `<p class="review-text" id="back-text-element">${this.escapeHtml(card.back)}</p>`;
+        }
+        if (!backHtml) {
+            backHtml = '<p style="color: var(--text-secondary);">Aucun contenu pour la réponse</p>';
+        }
+        backContent.innerHTML = backHtml;
+        
+        // Appliquer la taille de texte proportionnelle si image et texte sont présents
+        if (hasBackImage && hasBackText) {
+            setTimeout(() => {
+                const imageContainer = document.getElementById('back-image-container');
+                const textElement = document.getElementById('back-text-element');
+                if (imageContainer && textElement) {
+                    this.applyProportionalTextSize(imageContainer, textElement);
+                }
+            }, 50);
         }
         if (cardFront) cardFront.classList.remove('hidden');
         if (cardBack) cardBack.classList.add('hidden');
@@ -1553,7 +1617,13 @@ const App = {
             
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./service-worker.js')
-                    .then(reg => console.log('Service Worker enregistré'))
+                    .then(reg => {
+                        console.log('Service Worker enregistré');
+                        this.serviceWorkerRegistration = reg;
+                        
+                        // Demander la permission pour les notifications après l'installation
+                        this.requestNotificationPermission();
+                    })
                     .catch(err => {
                         // Ignorer silencieusement l'erreur en mode développement
                         if (window.location.protocol !== 'file:') {
@@ -1562,6 +1632,135 @@ const App = {
                     });
             });
         }
+    },
+    
+    // Demander la permission pour les notifications
+    async requestNotificationPermission() {
+        if (!('Notification' in window)) {
+            console.log('Ce navigateur ne supporte pas les notifications');
+            return;
+        }
+        
+        // Vérifier si la permission a déjà été accordée
+        if (Notification.permission === 'granted') {
+            console.log('Permission de notification déjà accordée');
+            return;
+        }
+        
+        // Vérifier si la permission a été refusée
+        if (Notification.permission === 'denied') {
+            console.log('Permission de notification refusée');
+            return;
+        }
+        
+        // Demander la permission (seulement si elle n'a pas encore été demandée)
+        // On ne demande pas automatiquement, on laisse l'utilisateur le faire via le menu
+    },
+    
+    // Demander explicitement la permission et configurer les notifications
+    async enableNotifications() {
+        if (!('Notification' in window)) {
+            alert('Votre navigateur ne supporte pas les notifications');
+            return false;
+        }
+        
+        if (!this.serviceWorkerRegistration) {
+            alert('Le service worker n\'est pas encore enregistré. Veuillez attendre quelques instants.');
+            return false;
+        }
+        
+        const permission = await Notification.requestPermission();
+        
+        if (permission === 'granted') {
+            console.log('Permission de notification accordée');
+            return true;
+        } else {
+            alert('Permission de notification refusée. Vous pouvez l\'activer dans les paramètres de votre navigateur.');
+            return false;
+        }
+    },
+    
+    // Configurer les rappels de révision
+    configureReviewReminders() {
+        // Charger la configuration existante
+        const savedConfig = localStorage.getItem('flashcards_reminder_config');
+        const config = savedConfig ? JSON.parse(savedConfig) : { enabled: false, time: '09:00', frequency: 'daily' };
+        
+        const content = `
+            <div style="line-height: 1.8;">
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="reminder-enabled" ${config.enabled ? 'checked' : ''} style="width: auto;">
+                        <span>Activer les rappels de révision</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="reminder-time">Heure de rappel</label>
+                    <input type="time" id="reminder-time" value="${config.time || '09:00'}" required>
+                </div>
+                <div class="form-group">
+                    <label for="reminder-frequency">Fréquence</label>
+                    <select id="reminder-frequency" required>
+                        <option value="once" ${config.frequency === 'once' ? 'selected' : ''}>Une seule fois</option>
+                        <option value="daily" ${config.frequency === 'daily' ? 'selected' : ''}>Quotidien</option>
+                        <option value="hourly" ${config.frequency === 'hourly' ? 'selected' : ''}>Toutes les heures</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="App.hideModal()">Annuler</button>
+                    <button type="button" class="btn btn-primary" id="save-reminder-btn">Enregistrer</button>
+                </div>
+            </div>
+        `;
+        
+        this.showModal('Rappels de révision', content);
+        
+        setTimeout(async () => {
+            const saveBtn = document.getElementById('save-reminder-btn');
+            const enabledCheckbox = document.getElementById('reminder-enabled');
+            
+            if (saveBtn) {
+                saveBtn.addEventListener('click', async () => {
+                    const enabled = enabledCheckbox.checked;
+                    const time = document.getElementById('reminder-time').value;
+                    const frequency = document.getElementById('reminder-frequency').value;
+                    
+                    if (enabled) {
+                        // Demander la permission si nécessaire
+                        const hasPermission = await this.enableNotifications();
+                        if (!hasPermission) {
+                            return;
+                        }
+                        
+                        // Envoyer la configuration au service worker
+                        if (this.serviceWorkerRegistration && this.serviceWorkerRegistration.active) {
+                            this.serviceWorkerRegistration.active.postMessage({
+                                type: 'SCHEDULE_REVIEW_REMINDER',
+                                time: time,
+                                frequency: frequency
+                            });
+                        }
+                    } else {
+                        // Annuler les rappels
+                        if (this.serviceWorkerRegistration && this.serviceWorkerRegistration.active) {
+                            this.serviceWorkerRegistration.active.postMessage({
+                                type: 'CANCEL_REMINDERS'
+                            });
+                        }
+                    }
+                    
+                    // Sauvegarder la configuration
+                    localStorage.setItem('flashcards_reminder_config', JSON.stringify({
+                        enabled: enabled,
+                        time: time,
+                        frequency: frequency
+                    }));
+                    
+                    this.hideModal();
+                    alert(enabled ? 'Rappels de révision activés !' : 'Rappels de révision désactivés.');
+                });
+            }
+        }, 10);
     },
     
     // ============================================
