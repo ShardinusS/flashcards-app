@@ -461,16 +461,14 @@ const App = {
         // Stocker les actions pour pouvoir les appeler
         this.currentMenuActions = items.map(item => item.action);
         
-        // Ajouter les event listeners pour les boutons du menu (click et touchstart pour iPhone)
+        // Ajouter les event listeners pour les boutons du menu
         const menuButtons = menuItems.querySelectorAll('.hamburger-menu-item');
         menuButtons.forEach((button, index) => {
-            const handleAction = (e) => {
+            button.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 this.hamburgerMenuAction(index);
-            };
-            button.addEventListener('click', handleAction);
-            button.addEventListener('touchend', handleAction);
+            });
         });
         
         menu.classList.remove('hidden');
@@ -528,11 +526,11 @@ const App = {
             `;
         }).join('');
         
-        // Ajouter les event listeners pour les boutons de deck (click et touchend pour iPhone)
+        // Ajouter les event listeners pour les boutons de deck
         container.querySelectorAll('.deck-action-btn').forEach(btn => {
             const deckId = btn.getAttribute('data-deck-id');
             const action = btn.getAttribute('data-action');
-            const handleAction = (e) => {
+            btn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 if (action === 'delete') {
@@ -540,9 +538,7 @@ const App = {
                 } else if (action === 'review') {
                     this.startReview(deckId);
                 }
-            };
-            btn.addEventListener('click', handleAction);
-            btn.addEventListener('touchend', handleAction);
+            });
         });
         
         container.querySelectorAll('.deck-card').forEach(card => {
@@ -657,13 +653,13 @@ const App = {
             `;
         }).join('');
         
-        // Ajouter les event listeners pour les boutons de carte (click et touchend pour iPhone)
+        // Ajouter les event listeners pour les boutons de carte
         const cardsContainer = document.getElementById('cards-container');
         if (cardsContainer) {
             cardsContainer.querySelectorAll('.card-action-btn').forEach(btn => {
                 const cardIndex = parseInt(btn.getAttribute('data-card-index'));
                 const action = btn.getAttribute('data-action');
-                const handleAction = (e) => {
+                btn.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     if (action === 'edit') {
@@ -671,9 +667,7 @@ const App = {
                     } else if (action === 'delete') {
                         this.deleteCard(cardIndex);
                     }
-                };
-                btn.addEventListener('click', handleAction);
-                btn.addEventListener('touchend', handleAction);
+                });
             });
         }
         
@@ -713,16 +707,19 @@ const App = {
         
         setTimeout(() => {
             const form = document.getElementById('add-deck-form');
+            const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
             if (form) {
-                form.addEventListener('submit', (e) => {
+                const handleSubmit = (e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     const name = document.getElementById('deck-name').value.trim();
                     if (name) {
                         this.vibrate();
                         this.createDeck(name);
                         this.hideModal();
                     }
-                });
+                };
+                form.addEventListener('submit', handleSubmit);
             }
         }, 10);
     },
@@ -749,7 +746,7 @@ const App = {
         
         setTimeout(() => {
             const form = document.getElementById('edit-deck-form');
-            const submitBtn = form?.querySelector('button[type="submit"]');
+            const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
             if (form) {
                 const handleSubmit = (e) => {
                     e.preventDefault();
@@ -762,14 +759,6 @@ const App = {
                     }
                 };
                 form.addEventListener('submit', handleSubmit);
-                // Ajouter touchstart pour iPhone
-                if (submitBtn) {
-                    submitBtn.addEventListener('touchend', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleSubmit(e);
-                    });
-                }
             }
         }, 10);
     },
@@ -795,7 +784,7 @@ const App = {
         
         setTimeout(() => {
             const form = document.getElementById('review-settings-form');
-            const submitBtn = form?.querySelector('button[type="submit"]');
+            const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
             if (form) {
                 const handleSubmit = (e) => {
                     e.preventDefault();
@@ -811,7 +800,8 @@ const App = {
                     } else {
                         alert('Veuillez entrer un nombre entre 1 et 100');
                     }
-                });
+                };
+                form.addEventListener('submit', handleSubmit);
             }
         }, 10);
     },
@@ -969,9 +959,13 @@ const App = {
             
             // Gestion de l'upload d'image pour la question
             if (btnImportFront && frontImageInput) {
-                btnImportFront.addEventListener('click', () => {
+                const handleImportFront = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     frontImageInput.click();
-                });
+                };
+                btnImportFront.addEventListener('click', handleImportFront);
+                btnImportFront.addEventListener('touchend', handleImportFront);
                 
                 frontImageInput.addEventListener('change', async (e) => {
                     const file = e.target.files[0];
@@ -1003,9 +997,13 @@ const App = {
             
             // Gestion de l'upload d'image pour la réponse
             if (btnImportBack && backImageInput) {
-                btnImportBack.addEventListener('click', () => {
+                const handleImportBack = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     backImageInput.click();
-                });
+                };
+                btnImportBack.addEventListener('click', handleImportBack);
+                btnImportBack.addEventListener('touchend', handleImportBack);
                 
                 backImageInput.addEventListener('change', async (e) => {
                     const file = e.target.files[0];
@@ -1064,14 +1062,6 @@ const App = {
                     this.hideModal();
                 };
                 form.addEventListener('submit', handleSubmit);
-                // Ajouter touchstart pour iPhone
-                if (submitBtn) {
-                    submitBtn.addEventListener('touchend', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleSubmit(e);
-                    });
-                }
             }
         }, 10);
     },
@@ -1259,14 +1249,6 @@ const App = {
                     this.hideModal();
                 };
                 form.addEventListener('submit', handleSubmit);
-                // Ajouter touchstart pour iPhone
-                if (submitBtn) {
-                    submitBtn.addEventListener('touchend', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleSubmit(e);
-                    });
-                }
             }
         }, 10);
     },
