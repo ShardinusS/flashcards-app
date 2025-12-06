@@ -17,13 +17,13 @@
     -->
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
-    <!-- Icônes Apple (iPhone/iPad) - precomposed pour éviter l'effet de brillance automatique -->
-    <link rel="apple-touch-icon-precomposed" sizes="1024x1024" href="icon-1024.png">
+    <!-- Icônes Apple (iPhone/iPad) - DOIT être en premier et utiliser 1024x1024 -->
+    <!-- apple-touch-icon sans size = icône par défaut (Apple utilisera la plus grande disponible) -->
+    <link rel="apple-touch-icon" href="icon-1024.png">
     <link rel="apple-touch-icon" sizes="1024x1024" href="icon-1024.png">
-    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
-    <!-- Icônes standard pour navigateurs -->
+    <link rel="apple-touch-icon-precomposed" sizes="1024x1024" href="icon-1024.png">
+    <!-- Icônes standard pour navigateurs (favicon) -->
     <link rel="icon" type="image/png" sizes="1024x1024" href="icon-1024.png">
-    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 </head>
 <body>
     <!-- Toast de notification simple -->
