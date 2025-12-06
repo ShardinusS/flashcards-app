@@ -1,4 +1,35 @@
 // ============================================
+// SYSTÈME D'ICÔNES SVG
+// ============================================
+
+const Icons = {
+    // Générer une icône SVG avec les paramètres donnés
+    getIcon(name, size = 20, color = 'currentColor') {
+        const icons = {
+            menu: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>`,
+            delete: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`,
+            refresh: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>`,
+            download: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`,
+            upload: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>`,
+            edit: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`,
+            chart: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>`,
+            settings: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"></path><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`,
+            books: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`,
+            card: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>`,
+            success: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`,
+            help: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`,
+            plus: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
+            arrowLeft: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>`,
+            arrowRight: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>`,
+            close: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+            list: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>`,
+            grid: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>`
+        };
+        return icons[name] || '';
+    }
+};
+
+// ============================================
 // GESTION DES DONNÉES
 // ============================================
 
@@ -209,12 +240,35 @@ const App = {
             this.cardsPerSession = parseInt(savedCardsPerSession) || 10;
         }
         
+        // Initialiser les icônes SVG dans le HTML
+        this.initIcons();
+        
         this.setupEventListeners();
         this.renderDecks();
         this.registerServiceWorker();
         
         // Afficher le popup d'aide lors de la première visite
         this.checkFirstVisit();
+    },
+    
+    initIcons() {
+        // Remplacer les placeholders d'icônes par les SVG réels
+        document.querySelectorAll('.icon-menu').forEach(el => {
+            el.innerHTML = Icons.getIcon('menu', 20, 'white');
+        });
+        document.querySelectorAll('.icon-arrow-left').forEach(el => {
+            el.innerHTML = Icons.getIcon('arrowLeft', 20, 'white');
+        });
+        document.querySelectorAll('.icon-close').forEach(el => {
+            const isWhite = el.closest('.icon-btn') || el.closest('.hamburger-menu-header');
+            el.innerHTML = Icons.getIcon('close', 24, isWhite ? 'white' : 'currentColor');
+        });
+        document.querySelectorAll('.icon-help').forEach(el => {
+            el.innerHTML = Icons.getIcon('help', 24, 'white');
+        });
+        document.querySelectorAll('.icon-plus').forEach(el => {
+            el.innerHTML = Icons.getIcon('plus', 24, 'white');
+        });
     },
     
     setupEventListeners() {
@@ -321,33 +375,33 @@ const App = {
         
         if (viewType === 'decks') {
             items = [
-                { icon: '⬇', text: 'Importer un deck', action: () => {
+                { icon: 'download', text: 'Importer un deck', action: () => {
                     document.getElementById('import-file-input').click();
                     this.hideHamburgerMenu();
                 }},
-                { icon: '☰', text: this.isGridView ? 'Vue liste' : 'Vue grille', action: () => {
+                { icon: this.isGridView ? 'list' : 'grid', text: this.isGridView ? 'Vue liste' : 'Vue grille', action: () => {
                     this.toggleView();
                 }},
             ];
         } else if (viewType === 'deck-detail') {
             items = [
-                { icon: '🔄', text: 'Réviser', action: () => {
+                { icon: 'refresh', text: 'Réviser', action: () => {
                     this.startReview(this.currentDeckId);
                     this.hideHamburgerMenu();
                 }},
-                { icon: '⚙', text: 'Paramètres de révision', action: () => {
+                { icon: 'settings', text: 'Paramètres de révision', action: () => {
                     this.showReviewSettingsModal();
                     this.hideHamburgerMenu();
                 }},
-                { icon: '📊', text: 'Statistiques', action: () => {
+                { icon: 'chart', text: 'Statistiques', action: () => {
                     this.showStatsModal();
                     this.hideHamburgerMenu();
                 }},
-                { icon: '⬆', text: 'Exporter', action: () => {
+                { icon: 'upload', text: 'Exporter', action: () => {
                     this.exportDeck();
                     this.hideHamburgerMenu();
                 }},
-                { icon: '✎', text: 'Modifier le deck', action: () => {
+                { icon: 'edit', text: 'Modifier le deck', action: () => {
                     this.showEditDeckModal();
                     this.hideHamburgerMenu();
                 }},
@@ -356,7 +410,7 @@ const App = {
         
         menuItems.innerHTML = items.map(item => `
             <button class="hamburger-menu-item" onclick="App.hamburgerMenuAction(${items.indexOf(item)})">
-                <span class="hamburger-menu-item-icon">${item.icon}</span>
+                <span class="hamburger-menu-item-icon">${Icons.getIcon(item.icon, 20, 'currentColor')}</span>
                 <span>${item.text}</span>
             </button>
         `).join('');
@@ -391,7 +445,7 @@ const App = {
         if (decks.length === 0) {
             container.innerHTML = `
                 <div class="empty-state" style="grid-column: 1 / -1;">
-                    <div class="empty-state-icon">📚</div>
+                    <div class="empty-state-icon">${Icons.getIcon('books', 64, 'var(--text-secondary)')}</div>
                     <div class="empty-state-text">Aucun deck. Créez-en un pour commencer !</div>
                 </div>
             `;
@@ -406,8 +460,8 @@ const App = {
             return `
                 <div class="deck-card" data-deck-id="${deck.id}">
                     <div class="deck-actions">
-                        <button class="deck-action-btn" onclick="App.deleteDeck('${deck.id}')" title="Supprimer">🗑</button>
-                        <button class="deck-action-btn" onclick="App.startReview('${deck.id}')" title="Réviser">🔄</button>
+                        <button class="deck-action-btn" onclick="App.deleteDeck('${deck.id}')" title="Supprimer">${Icons.getIcon('delete', 16, 'currentColor')}</button>
+                        <button class="deck-action-btn" onclick="App.startReview('${deck.id}')" title="Réviser">${Icons.getIcon('refresh', 16, 'currentColor')}</button>
                     </div>
                     <h3>${this.escapeHtml(deck.name)}</h3>
                     <div class="deck-info">
@@ -457,7 +511,7 @@ const App = {
         if (deck.cards.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
-                    <div class="empty-state-icon">🃏</div>
+                    <div class="empty-state-icon">${Icons.getIcon('card', 64, 'var(--text-secondary)')}</div>
                     <div class="empty-state-text">Aucune carte. Ajoutez-en une pour commencer !</div>
                 </div>
             `;
@@ -483,8 +537,16 @@ const App = {
                         </span>
                     </div>
                     <div class="card-item-content">
-                        <strong>Question:</strong> ${this.escapeHtml(card.front)}<br>
-                        <strong>Réponse:</strong> ${this.escapeHtml(card.back)}
+                        <div class="card-side-content">
+                            <strong>Question:</strong>
+                            ${card.frontImage ? `<div class="card-image-container" data-card-index="${index}" data-side="front"><img src="${card.frontImage}" alt="Question" class="card-image"></div>` : ''}
+                            ${card.front ? `<div class="card-text" data-card-index="${index}" data-side="front">${this.escapeHtml(card.front)}</div>` : ''}
+                        </div>
+                        <div class="card-side-content" style="margin-top: 10px;">
+                            <strong>Réponse:</strong>
+                            ${card.backImage ? `<div class="card-image-container" data-card-index="${index}" data-side="back"><img src="${card.backImage}" alt="Réponse" class="card-image"></div>` : ''}
+                            ${card.back ? `<div class="card-text" data-card-index="${index}" data-side="back">${this.escapeHtml(card.back)}</div>` : ''}
+                        </div>
                     </div>
                     <div class="card-item-actions">
                         <button class="card-action-btn" onclick="App.editCard(${index})">Modifier</button>
@@ -493,6 +555,18 @@ const App = {
                 </div>
             `;
         }).join('');
+        
+        // Appliquer la taille de texte proportionnelle aux images dans la liste
+        setTimeout(() => {
+            container.querySelectorAll('.card-image-container').forEach(imageContainer => {
+                const side = imageContainer.dataset.side;
+                const cardIndex = imageContainer.dataset.cardIndex;
+                const textElement = container.querySelector(`.card-text[data-side="${side}"][data-card-index="${cardIndex}"]`);
+                if (textElement) {
+                    this.applyProportionalTextSize(imageContainer, textElement);
+                }
+            });
+        }, 100);
     },
     
     // ============================================
@@ -662,7 +736,10 @@ const App = {
         
         const statsHtml = `
             <div style="margin-bottom: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px;">
-                <h3 style="margin-top: 0; margin-bottom: 10px;">📊 Statistiques du deck</h3>
+                <h3 style="margin-top: 0; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                    <span class="icon-svg">${Icons.getIcon('chart', 20, 'var(--primary-color)')}</span>
+                    Statistiques du deck
+                </h3>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; font-size: 14px;">
                     <div><strong>Total cartes:</strong> ${totalCards}</div>
                     <div><strong>Cartes à réviser:</strong> ${cardsDue}</div>
@@ -679,8 +756,10 @@ const App = {
                         <tr style="background: var(--bg-secondary); position: sticky; top: 0;">
                             <th style="padding: 8px; text-align: left; border-bottom: 2px solid var(--border-color);">#</th>
                             <th style="padding: 8px; text-align: left; border-bottom: 2px solid var(--border-color);">Carte</th>
-                            <th style="padding: 8px; text-align: center; border-bottom: 2px solid var(--border-color);">🔴 Encore</th>
-                            <th style="padding: 8px; text-align: center; border-bottom: 2px solid var(--border-color);">📊 Score</th>
+                            <th style="padding: 8px; text-align: center; border-bottom: 2px solid var(--border-color);">Encore</th>
+                            <th style="padding: 8px; text-align: center; border-bottom: 2px solid var(--border-color);">
+                                <span class="icon-svg" style="display: inline-block; vertical-align: middle;">${Icons.getIcon('chart', 14, 'currentColor')}</span> Score
+                            </th>
                             <th style="padding: 8px; text-align: center; border-bottom: 2px solid var(--border-color);">📅 Prochaine</th>
                         </tr>
                     </thead>
@@ -720,11 +799,25 @@ const App = {
             <form id="add-card-form">
                 <div class="form-group">
                     <label for="input-card-front">Question</label>
-                    <textarea id="input-card-front" required placeholder="Texte de la question"></textarea>
+                    <textarea id="input-card-front" placeholder="Texte de la question"></textarea>
+                </div>
+                <div class="form-group">
+                    <input type="file" id="input-card-front-image" accept="image/*" style="display: none;">
+                    <button type="button" class="btn btn-primary btn-import-image" id="btn-import-front-image">
+                        Importer une image pour la question
+                    </button>
+                    <div id="front-image-preview" class="image-preview"></div>
                 </div>
                 <div class="form-group">
                     <label for="input-card-back">Réponse</label>
-                    <textarea id="input-card-back" required placeholder="Texte de la réponse"></textarea>
+                    <textarea id="input-card-back" placeholder="Texte de la réponse"></textarea>
+                </div>
+                <div class="form-group">
+                    <input type="file" id="input-card-back-image" accept="image/*" style="display: none;">
+                    <button type="button" class="btn btn-primary btn-import-image" id="btn-import-back-image">
+                        Importer une image pour la réponse
+                    </button>
+                    <div id="back-image-preview" class="image-preview"></div>
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="App.hideModal()">Annuler</button>
@@ -737,17 +830,99 @@ const App = {
         
         setTimeout(() => {
             const form = document.getElementById('add-card-form');
+            const frontImageInput = document.getElementById('input-card-front-image');
+            const backImageInput = document.getElementById('input-card-back-image');
+            const frontImagePreview = document.getElementById('front-image-preview');
+            const backImagePreview = document.getElementById('back-image-preview');
+            const btnImportFront = document.getElementById('btn-import-front-image');
+            const btnImportBack = document.getElementById('btn-import-back-image');
+            
+            const imageData = { front: null, back: null };
+            
+            // Gestion de l'upload d'image pour la question
+            if (btnImportFront && frontImageInput) {
+                btnImportFront.addEventListener('click', () => {
+                    frontImageInput.click();
+                });
+                
+                frontImageInput.addEventListener('change', async (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        try {
+                            const base64 = await this.imageToBase64(file);
+                            imageData.front = base64;
+                            if (frontImagePreview) {
+                                frontImagePreview.innerHTML = `<img src="${base64}" alt="Aperçu" class="preview-image"><button type="button" class="btn-remove-preview" id="btn-remove-front-new">×</button>`;
+                                const newBtn = document.getElementById('btn-remove-front-new');
+                                if (newBtn) {
+                                    newBtn.addEventListener('click', () => {
+                                        imageData.front = null;
+                                        if (frontImageInput) frontImageInput.value = '';
+                                        if (frontImagePreview) frontImagePreview.innerHTML = '';
+                                    });
+                                }
+                            }
+                        } catch (error) {
+                            alert('Erreur lors du chargement de l\'image : ' + error.message);
+                        }
+                    }
+                });
+            }
+            
+            // Gestion de l'upload d'image pour la réponse
+            if (btnImportBack && backImageInput) {
+                btnImportBack.addEventListener('click', () => {
+                    backImageInput.click();
+                });
+                
+                backImageInput.addEventListener('change', async (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        try {
+                            const base64 = await this.imageToBase64(file);
+                            imageData.back = base64;
+                            if (backImagePreview) {
+                                backImagePreview.innerHTML = `<img src="${base64}" alt="Aperçu" class="preview-image"><button type="button" class="btn-remove-preview" id="btn-remove-back-new">×</button>`;
+                                const newBtn = document.getElementById('btn-remove-back-new');
+                                if (newBtn) {
+                                    newBtn.addEventListener('click', () => {
+                                        imageData.back = null;
+                                        if (backImageInput) backImageInput.value = '';
+                                        if (backImagePreview) backImagePreview.innerHTML = '';
+                                    });
+                                }
+                            }
+                        } catch (error) {
+                            alert('Erreur lors du chargement de l\'image : ' + error.message);
+                        }
+                    }
+                });
+            }
+            
             if (form) {
-                form.addEventListener('submit', (e) => {
+                form.addEventListener('submit', async (e) => {
                     e.preventDefault();
                     const front = document.getElementById('input-card-front').value.trim();
                     const back = document.getElementById('input-card-back').value.trim();
-                    if (front && back) {
-                        this.createCard(front, back);
-                        this.hideModal();
-                    } else {
-                        alert('Veuillez remplir les deux champs');
+                    
+                    // Vérifier qu'au moins un champ (texte ou image) est rempli pour chaque côté
+                    if (!front && !imageData.front && !back && !imageData.back) {
+                        alert('Veuillez remplir au moins un champ (texte ou image) pour la question et la réponse');
+                        return;
                     }
+                    
+                    if (!front && !imageData.front) {
+                        alert('Veuillez ajouter du texte ou une image pour la question');
+                        return;
+                    }
+                    
+                    if (!back && !imageData.back) {
+                        alert('Veuillez ajouter du texte ou une image pour la réponse');
+                        return;
+                    }
+                    
+                    await this.createCard(front, back, imageData.front, imageData.back);
+                    this.hideModal();
                 });
             }
         }, 10);
@@ -759,17 +934,33 @@ const App = {
         if (!deck || !deck.cards[cardIndex]) return;
         
         const card = deck.cards[cardIndex];
+        const frontImage = card.frontImage || '';
+        const backImage = card.backImage || '';
         
         // IDs MODIFIÉS: input-edit-card-front et input-edit-card-back
         const content = `
             <form id="edit-card-form">
                 <div class="form-group">
                     <label for="input-edit-card-front">Question</label>
-                    <textarea id="input-edit-card-front" required>${this.escapeHtml(card.front)}</textarea>
+                    <textarea id="input-edit-card-front" placeholder="Texte de la question">${this.escapeHtml(card.front || '')}</textarea>
+                </div>
+                <div class="form-group">
+                    <input type="file" id="input-edit-card-front-image" accept="image/*" style="display: none;">
+                    <button type="button" class="btn btn-primary btn-import-image" id="btn-edit-import-front-image">
+                        Importer une image pour la question
+                    </button>
+                    <div id="edit-front-image-preview" class="image-preview">${frontImage ? `<img src="${frontImage}" alt="Aperçu" class="preview-image"><button type="button" class="btn-remove-preview" id="btn-remove-edit-front">×</button>` : ''}</div>
                 </div>
                 <div class="form-group">
                     <label for="input-edit-card-back">Réponse</label>
-                    <textarea id="input-edit-card-back" required>${this.escapeHtml(card.back)}</textarea>
+                    <textarea id="input-edit-card-back" placeholder="Texte de la réponse">${this.escapeHtml(card.back || '')}</textarea>
+                </div>
+                <div class="form-group">
+                    <input type="file" id="input-edit-card-back-image" accept="image/*" style="display: none;">
+                    <button type="button" class="btn btn-primary btn-import-image" id="btn-edit-import-back-image">
+                        Importer une image pour la réponse
+                    </button>
+                    <div id="edit-back-image-preview" class="image-preview">${backImage ? `<img src="${backImage}" alt="Aperçu" class="preview-image"><button type="button" class="btn-remove-preview" id="btn-remove-edit-back">×</button>` : ''}</div>
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="App.hideModal()">Annuler</button>
@@ -782,17 +973,119 @@ const App = {
         
         setTimeout(() => {
             const form = document.getElementById('edit-card-form');
+            const frontImageInput = document.getElementById('input-edit-card-front-image');
+            const backImageInput = document.getElementById('input-edit-card-back-image');
+            const frontImagePreview = document.getElementById('edit-front-image-preview');
+            const backImagePreview = document.getElementById('edit-back-image-preview');
+            const btnImportFront = document.getElementById('btn-edit-import-front-image');
+            const btnImportBack = document.getElementById('btn-edit-import-back-image');
+            
+            const editImageData = { front: frontImage || null, back: backImage || null };
+            
+            // Gestion de la suppression d'image
+            const btnRemoveFront = document.getElementById('btn-remove-edit-front');
+            const btnRemoveBack = document.getElementById('btn-remove-edit-back');
+            
+            if (btnRemoveFront) {
+                btnRemoveFront.addEventListener('click', () => {
+                    editImageData.front = null;
+                    if (frontImageInput) frontImageInput.value = '';
+                    if (frontImagePreview) frontImagePreview.innerHTML = '';
+                });
+            }
+            
+            if (btnRemoveBack) {
+                btnRemoveBack.addEventListener('click', () => {
+                    editImageData.back = null;
+                    if (backImageInput) backImageInput.value = '';
+                    if (backImagePreview) backImagePreview.innerHTML = '';
+                });
+            }
+            
+            // Gestion de l'upload d'image pour la question
+            if (btnImportFront && frontImageInput) {
+                btnImportFront.addEventListener('click', () => {
+                    frontImageInput.click();
+                });
+                
+                frontImageInput.addEventListener('change', async (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        try {
+                            const base64 = await this.imageToBase64(file);
+                            editImageData.front = base64;
+                            if (frontImagePreview) {
+                                frontImagePreview.innerHTML = `<img src="${base64}" alt="Aperçu" class="preview-image"><button type="button" class="btn-remove-preview" id="btn-remove-edit-front-new">×</button>`;
+                                const newBtn = document.getElementById('btn-remove-edit-front-new');
+                                if (newBtn) {
+                                    newBtn.addEventListener('click', () => {
+                                        editImageData.front = null;
+                                        if (frontImageInput) frontImageInput.value = '';
+                                        if (frontImagePreview) frontImagePreview.innerHTML = '';
+                                    });
+                                }
+                            }
+                        } catch (error) {
+                            alert('Erreur lors du chargement de l\'image : ' + error.message);
+                        }
+                    }
+                });
+            }
+            
+            // Gestion de l'upload d'image pour la réponse
+            if (btnImportBack && backImageInput) {
+                btnImportBack.addEventListener('click', () => {
+                    backImageInput.click();
+                });
+                
+                backImageInput.addEventListener('change', async (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        try {
+                            const base64 = await this.imageToBase64(file);
+                            editImageData.back = base64;
+                            if (backImagePreview) {
+                                backImagePreview.innerHTML = `<img src="${base64}" alt="Aperçu" class="preview-image"><button type="button" class="btn-remove-preview" id="btn-remove-edit-back-new">×</button>`;
+                                const newBtn = document.getElementById('btn-remove-edit-back-new');
+                                if (newBtn) {
+                                    newBtn.addEventListener('click', () => {
+                                        editImageData.back = null;
+                                        if (backImageInput) backImageInput.value = '';
+                                        if (backImagePreview) backImagePreview.innerHTML = '';
+                                    });
+                                }
+                            }
+                        } catch (error) {
+                            alert('Erreur lors du chargement de l\'image : ' + error.message);
+                        }
+                    }
+                });
+            }
+            
             if (form) {
-                form.addEventListener('submit', (e) => {
+                form.addEventListener('submit', async (e) => {
                     e.preventDefault();
                     const front = document.getElementById('input-edit-card-front').value.trim();
                     const back = document.getElementById('input-edit-card-back').value.trim();
-                    if (front && back) {
-                        this.updateCard(cardIndex, front, back);
-                        this.hideModal();
-                    } else {
-                        alert('Veuillez remplir les deux champs');
+                    
+                    // Vérifier qu'au moins un champ (texte ou image) est rempli pour chaque côté
+                    if (!front && !editImageData.front && !back && !editImageData.back) {
+                        alert('Veuillez remplir au moins un champ (texte ou image) pour la question et la réponse');
+                        return;
                     }
+                    
+                    if (!front && !editImageData.front) {
+                        alert('Veuillez ajouter du texte ou une image pour la question');
+                        return;
+                    }
+                    
+                    if (!back && !editImageData.back) {
+                        alert('Veuillez ajouter du texte ou une image pour la réponse');
+                        return;
+                    }
+                    
+                    await this.updateCard(cardIndex, front, back, editImageData.front, editImageData.back);
+                    this.hideModal();
                 });
             }
         }, 10);
@@ -840,7 +1133,7 @@ const App = {
     // GESTION DES CARTES
     // ============================================
     
-    createCard(front, back) {
+    createCard(front, back, frontImage = null, backImage = null) {
         if (!this.currentDeckId) {
             console.error('Aucun deck sélectionné');
             return;
@@ -853,8 +1146,10 @@ const App = {
         }
         
         const card = {
-            front: front,
-            back: back,
+            front: front || '',
+            back: back || '',
+            frontImage: frontImage || null,
+            backImage: backImage || null,
             easeFactor: 2.5,
             interval: 1,
             repetitions: 0,
@@ -870,16 +1165,38 @@ const App = {
         this.renderDecks();
     },
     
+    removeImagePreview(side, imageData) {
+        if (side === 'front') {
+            const input = document.getElementById('input-card-front-image');
+            const preview = document.getElementById('front-image-preview');
+            if (input) input.value = '';
+            if (preview) preview.innerHTML = '';
+            if (imageData) imageData.front = null;
+        } else if (side === 'back') {
+            const input = document.getElementById('input-card-back-image');
+            const preview = document.getElementById('back-image-preview');
+            if (input) input.value = '';
+            if (preview) preview.innerHTML = '';
+            if (imageData) imageData.back = null;
+        }
+    },
+    
     editCard(index) {
         this.showEditCardModal(index);
     },
     
-    updateCard(index, front, back) {
+    updateCard(index, front, back, frontImage = null, backImage = null) {
         if (!this.currentDeckId) return;
         const deck = Storage.getDeck(this.currentDeckId);
         if (deck && deck.cards[index]) {
-            deck.cards[index].front = front;
-            deck.cards[index].back = back;
+            deck.cards[index].front = front || '';
+            deck.cards[index].back = back || '';
+            if (frontImage !== null) {
+                deck.cards[index].frontImage = frontImage || null;
+            }
+            if (backImage !== null) {
+                deck.cards[index].backImage = backImage || null;
+            }
             Storage.saveDeck(deck);
             this.renderCards();
         }
@@ -911,7 +1228,11 @@ const App = {
             if (reviewCard) {
                 reviewCard.innerHTML = `
                     <div class="card-side">
-                        <p>🎉 Félicitations !<br><br>Vous avez terminé toutes les cartes à réviser.</p>
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 15px;">
+                            <div class="icon-svg" style="color: var(--success);">${Icons.getIcon('success', 48, 'var(--success)')}</div>
+                            <p style="font-size: 20px; font-weight: 600;">Félicitations !</p>
+                            <p>Vous avez terminé toutes les cartes à réviser.</p>
+                        </div>
                     </div>
                 `;
             }
@@ -930,24 +1251,26 @@ const App = {
             reviewCard.innerHTML = `
                 <div id="card-front" class="card-side">
                     <div id="review-card-color-band" class="review-card-color-band"></div>
-                    <p id="front-text"></p>
+                    <div id="front-content" class="card-side-inner"></div>
                 </div>
                 <div id="card-back" class="card-side hidden">
                     <div id="review-card-color-band-back" class="review-card-color-band"></div>
-                    <p id="back-text"></p>
+                    <div id="back-content" class="card-side-inner"></div>
                 </div>
                 <div id="reveal-hint" class="reveal-hint">Tapez pour révéler</div>
             `;
         }
         
         const card = this.reviewCards[this.currentReviewIndex];
+        if (!card) return;
+        
         const total = this.reviewCards.length;
         const current = this.currentReviewIndex + 1;
         const cardScore = card.cardScore || 0;
         const cardColor = ColorZones.getCardColor(cardScore);
         
-        const frontText = document.getElementById('front-text');
-        const backText = document.getElementById('back-text');
+        const frontContent = document.getElementById('front-content');
+        const backContent = document.getElementById('back-content');
         const cardFront = document.getElementById('card-front');
         const cardBack = document.getElementById('card-back');
         const revealHint = document.getElementById('reveal-hint');
@@ -956,8 +1279,63 @@ const App = {
         const colorBand = document.getElementById('review-card-color-band');
         const colorBandBack = document.getElementById('review-card-color-band-back');
         
-        if (frontText) frontText.textContent = card.front;
-        if (backText) backText.textContent = card.back;
+        // Construire le contenu de la question avec image et/ou texte
+        if (frontContent) {
+            let frontHtml = '';
+            const hasFrontImage = card.frontImage && (typeof card.frontImage === 'string') && card.frontImage.trim() !== '';
+            const hasFrontText = card.front && (typeof card.front === 'string') && card.front.trim() !== '';
+            
+            if (hasFrontImage) {
+                frontHtml += `<div class="review-image-container" id="front-image-container"><img src="${card.frontImage}" alt="Question" class="review-image"></div>`;
+            }
+            if (hasFrontText) {
+                frontHtml += `<p class="review-text" id="front-text-element">${this.escapeHtml(card.front)}</p>`;
+            }
+            if (!frontHtml) {
+                frontHtml = '<p style="color: var(--text-secondary);">Aucun contenu pour la question</p>';
+            }
+            frontContent.innerHTML = frontHtml;
+            
+            // Appliquer la taille de texte proportionnelle si image et texte sont présents
+            if (hasFrontImage && hasFrontText) {
+                setTimeout(() => {
+                    const imageContainer = document.getElementById('front-image-container');
+                    const textElement = document.getElementById('front-text-element');
+                    if (imageContainer && textElement) {
+                        this.applyProportionalTextSize(imageContainer, textElement);
+                    }
+                }, 50);
+            }
+        }
+        
+        // Construire le contenu de la réponse avec image et/ou texte
+        if (backContent) {
+            let backHtml = '';
+            const hasBackImage = card.backImage && (typeof card.backImage === 'string') && card.backImage.trim() !== '';
+            const hasBackText = card.back && (typeof card.back === 'string') && card.back.trim() !== '';
+            
+            if (hasBackImage) {
+                backHtml += `<div class="review-image-container" id="back-image-container"><img src="${card.backImage}" alt="Réponse" class="review-image"></div>`;
+            }
+            if (hasBackText) {
+                backHtml += `<p class="review-text" id="back-text-element">${this.escapeHtml(card.back)}</p>`;
+            }
+            if (!backHtml) {
+                backHtml = '<p style="color: var(--text-secondary);">Aucun contenu pour la réponse</p>';
+            }
+            backContent.innerHTML = backHtml;
+            
+            // Appliquer la taille de texte proportionnelle si image et texte sont présents
+            if (hasBackImage && hasBackText) {
+                setTimeout(() => {
+                    const imageContainer = document.getElementById('back-image-container');
+                    const textElement = document.getElementById('back-text-element');
+                    if (imageContainer && textElement) {
+                        this.applyProportionalTextSize(imageContainer, textElement);
+                    }
+                }, 50);
+            }
+        }
         if (cardFront) cardFront.classList.remove('hidden');
         if (cardBack) cardBack.classList.add('hidden');
         if (revealHint) revealHint.style.display = 'block';
@@ -1016,8 +1394,10 @@ const App = {
         const exportData = {
             name: deck.name,
             cards: deck.cards.map(card => ({
-                front: card.front,
-                back: card.back
+                front: card.front || '',
+                back: card.back || '',
+                frontImage: card.frontImage || null,
+                backImage: card.backImage || null
             }))
         };
         
@@ -1090,8 +1470,10 @@ const App = {
                     // Accepter front/back même s'ils sont vides (on les trimmera)
                     const front = card.front !== undefined && card.front !== null ? String(card.front).trim() : '';
                     const back = card.back !== undefined && card.back !== null ? String(card.back).trim() : '';
+                    const frontImage = card.frontImage || null;
+                    const backImage = card.backImage || null;
                     
-                    if (!front || !back) {
+                    if ((!front && !frontImage) || (!back && !backImage)) {
                         console.warn(`Carte ${index + 1} ignorée: champs manquants ou vides`, {
                             front: front || '(vide)',
                             back: back || '(vide)',
@@ -1105,6 +1487,8 @@ const App = {
                     return {
                         front: front,
                         back: back,
+                        frontImage: frontImage,
+                        backImage: backImage,
                         easeFactor: 2.5,
                         interval: 1,
                         repetitions: 0,
@@ -1190,6 +1574,90 @@ const App = {
         return div.innerHTML;
     },
     
+    // Convertir un fichier image en base64
+    async imageToBase64(file) {
+        return new Promise((resolve, reject) => {
+            if (!file) {
+                resolve(null);
+                return;
+            }
+            
+            // Vérifier que c'est bien une image
+            if (!file.type.startsWith('image/')) {
+                reject(new Error('Le fichier doit être une image'));
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = (e) => reject(e);
+            reader.readAsDataURL(file);
+        });
+    },
+    
+    // Calculer la taille de texte proportionnelle à la surface de l'image
+    calculateTextSizeFromImage(imageElement) {
+        if (!imageElement) {
+            return null;
+        }
+        
+        const getDimensions = () => {
+            const width = imageElement.offsetWidth || imageElement.naturalWidth || 0;
+            const height = imageElement.offsetHeight || imageElement.naturalHeight || 0;
+            
+            if (width === 0 || height === 0) {
+                return null;
+            }
+            
+            // Calculer la surface (largeur × hauteur) en pixels carrés
+            const surface = width * height;
+            
+            // Formule pour calculer la taille de texte proportionnelle
+            const baseSize = 16;
+            const factor = Math.sqrt(surface) / 40;
+            const fontSize = Math.max(12, Math.min(56, baseSize + factor));
+            
+            return Math.round(fontSize);
+        };
+        
+        if (imageElement.complete && imageElement.naturalWidth > 0) {
+            return getDimensions();
+        }
+        
+        return null;
+    },
+    
+    // Appliquer la taille de texte proportionnelle à une image et son texte associé
+    applyProportionalTextSize(imageContainer, textElement) {
+        if (!imageContainer || !textElement) return;
+        
+        const image = imageContainer.querySelector('img');
+        if (!image) return;
+        
+        const applySize = () => {
+            const fontSize = this.calculateTextSizeFromImage(image);
+            if (fontSize) {
+                textElement.style.fontSize = fontSize + 'px';
+                textElement.style.lineHeight = '1.5';
+            }
+        };
+        
+        if (image.complete && image.naturalWidth > 0) {
+            setTimeout(applySize, 10);
+        } else {
+            image.addEventListener('load', () => {
+                setTimeout(applySize, 10);
+            }, { once: true });
+        }
+        
+        if (window.ResizeObserver) {
+            const resizeObserver = new ResizeObserver(() => {
+                applySize();
+            });
+            resizeObserver.observe(image);
+        }
+    },
+    
     // ============================================
     // AIDE ET PREMIÈRE VISITE
     // ============================================
@@ -1206,38 +1674,152 @@ const App = {
     },
     
     showHelpModal() {
+        const helpPages = [
+            {
+                title: 'Qu\'est-ce qu\'une flashcard ?',
+                icon: 'books',
+                content: `
+                    <p style="margin-bottom: 15px;">
+                        Une <strong>flashcard</strong> (carte flash) est un outil d'apprentissage efficace basé sur la répétition espacée. 
+                        C'est une carte avec une <strong>question</strong> sur le recto et la <strong>réponse</strong> sur le verso.
+                    </p>
+                    <div style="background: var(--surface); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <p style="margin: 0; font-weight: 600; margin-bottom: 8px;">Exemple :</p>
+                        <p style="margin: 0; margin-bottom: 5px;"><strong>Question :</strong> "Bonjour"</p>
+                        <p style="margin: 0;"><strong>Réponse :</strong> "Hello"</p>
+                    </div>
+                `
+            },
+            {
+                title: 'Comment ça fonctionne ?',
+                icon: 'settings',
+                content: `
+                    <ol style="padding-left: 20px; margin-bottom: 15px; line-height: 1.8;">
+                        <li style="margin-bottom: 12px;"><strong>Créez un deck</strong> : Organisez vos cartes par thème (ex: vocabulaire anglais, histoire, etc.)</li>
+                        <li style="margin-bottom: 12px;"><strong>Ajoutez des cartes</strong> : Pour chaque carte, entrez une question et sa réponse. Vous pouvez aussi ajouter des images !</li>
+                        <li style="margin-bottom: 12px;"><strong>Révisez régulièrement</strong> : L'application vous propose les cartes à réviser selon leur difficulté</li>
+                        <li style="margin-bottom: 12px;"><strong>Évaluez-vous</strong> : Après avoir vu la réponse, indiquez si c'était "Encore", "Bien" ou "Facile"</li>
+                    </ol>
+                `
+            },
+            {
+                title: 'Astuce',
+                icon: 'help',
+                content: `
+                    <p style="margin-bottom: 15px; line-height: 1.8;">
+                        Plus vous répondez correctement, moins la carte vous sera proposée. 
+                        Les cartes difficiles apparaîtront plus souvent jusqu'à ce que vous les maîtrisiez !
+                    </p>
+                    <p style="margin-bottom: 0; line-height: 1.8;">
+                        Vous pouvez créer des cartes avec du texte, des images, ou les deux combinés. 
+                        Les images s'adaptent automatiquement à l'espace disponible.
+                    </p>
+                `
+            }
+        ];
+        
         const content = `
-            <div style="line-height: 1.8;">
-                <h3 style="margin-top: 0; color: var(--primary-color); font-size: 20px;">📚 Qu'est-ce qu'une flashcard ?</h3>
-                
-                <p style="margin-bottom: 15px;">
-                    Une <strong>flashcard</strong> (carte flash) est un outil d'apprentissage efficace basé sur la répétition espacée. 
-                    C'est une carte avec une <strong>question</strong> sur le recto et la <strong>réponse</strong> sur le verso.
-                </p>
-                
-                <div style="background: var(--surface); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                    <p style="margin: 0; font-weight: 600; margin-bottom: 8px;">Exemple :</p>
-                    <p style="margin: 0; margin-bottom: 5px;"><strong>Question :</strong> "Bonjour"</p>
-                    <p style="margin: 0;"><strong>Réponse :</strong> "Hello"</p>
+            <div class="help-modal-container">
+                <div class="help-pages-wrapper">
+                    ${helpPages.map((page, index) => `
+                        <div class="help-page ${index === 0 ? 'active' : ''}" data-page="${index}">
+                            <h3 class="help-page-title">
+                                <span class="icon-svg" style="display: inline-block; vertical-align: middle; margin-right: 8px;">${Icons.getIcon(page.icon, 24, 'var(--primary-color)')}</span>
+                                ${page.title}
+                            </h3>
+                            <div class="help-page-content" style="line-height: 1.8;">
+                                ${page.content}
+                            </div>
+                        </div>
+                    `).join('')}
                 </div>
-                
-                <h4 style="margin-top: 20px; margin-bottom: 10px; font-size: 16px;">🎯 Comment ça fonctionne ?</h4>
-                <ol style="padding-left: 20px; margin-bottom: 15px;">
-                    <li style="margin-bottom: 8px;"><strong>Créez un deck</strong> : Organisez vos cartes par thème (ex: vocabulaire anglais, histoire, etc.)</li>
-                    <li style="margin-bottom: 8px;"><strong>Ajoutez des cartes</strong> : Pour chaque carte, entrez une question et sa réponse</li>
-                    <li style="margin-bottom: 8px;"><strong>Révisez régulièrement</strong> : L'application vous propose les cartes à réviser selon leur difficulté</li>
-                    <li style="margin-bottom: 8px;"><strong>Évaluez-vous</strong> : Après avoir vu la réponse, indiquez si c'était "Encore", "Bien" ou "Facile"</li>
-                </ol>
-                
-                <h4 style="margin-top: 20px; margin-bottom: 10px; font-size: 16px;">💡 Astuce</h4>
-                <p style="margin-bottom: 0;">
-                    Plus vous répondez correctement, moins la carte vous sera proposée. 
-                    Les cartes difficiles apparaîtront plus souvent jusqu'à ce que vous les maîtrisiez !
-                </p>
+                <div class="help-navigation">
+                    <button class="help-nav-btn help-nav-prev" id="help-prev-btn" aria-label="Page précédente">
+                        <span class="icon-svg">${Icons.getIcon('arrowLeft', 20, 'white')}</span>
+                    </button>
+                    <div class="help-dots">
+                        ${helpPages.map((_, index) => `
+                            <span class="help-dot ${index === 0 ? 'active' : ''}" data-page="${index}"></span>
+                        `).join('')}
+                    </div>
+                    <button class="help-nav-btn help-nav-next" id="help-next-btn" aria-label="Page suivante">
+                        <span class="icon-svg">${Icons.getIcon('arrowRight', 20, 'white')}</span>
+                    </button>
+                </div>
             </div>
         `;
         
         this.showModal('Bienvenue ! Guide des flashcards', content);
+        
+        // Initialiser la navigation
+        setTimeout(() => {
+            let currentPage = 0;
+            const totalPages = helpPages.length;
+            const pages = document.querySelectorAll('.help-page');
+            const dots = document.querySelectorAll('.help-dot');
+            const prevBtn = document.getElementById('help-prev-btn');
+            const nextBtn = document.getElementById('help-next-btn');
+            
+            const updatePage = (pageIndex) => {
+                // Mettre à jour les pages
+                pages.forEach((page, index) => {
+                    if (index === pageIndex) {
+                        page.classList.add('active');
+                    } else {
+                        page.classList.remove('active');
+                    }
+                });
+                
+                // Mettre à jour les points
+                dots.forEach((dot, index) => {
+                    if (index === pageIndex) {
+                        dot.classList.add('active');
+                    } else {
+                        dot.classList.remove('active');
+                    }
+                });
+                
+                // Mettre à jour les boutons de navigation
+                if (prevBtn) {
+                    prevBtn.style.opacity = pageIndex === 0 ? '0.3' : '1';
+                    prevBtn.style.cursor = pageIndex === 0 ? 'not-allowed' : 'pointer';
+                }
+                if (nextBtn) {
+                    nextBtn.style.opacity = pageIndex === totalPages - 1 ? '0.3' : '1';
+                    nextBtn.style.cursor = pageIndex === totalPages - 1 ? 'not-allowed' : 'pointer';
+                }
+            };
+            
+            // Navigation avec les boutons
+            if (prevBtn) {
+                prevBtn.addEventListener('click', () => {
+                    if (currentPage > 0) {
+                        currentPage--;
+                        updatePage(currentPage);
+                    }
+                });
+            }
+            
+            if (nextBtn) {
+                nextBtn.addEventListener('click', () => {
+                    if (currentPage < totalPages - 1) {
+                        currentPage++;
+                        updatePage(currentPage);
+                    }
+                });
+            }
+            
+            // Navigation avec les points
+            dots.forEach((dot, index) => {
+                dot.addEventListener('click', () => {
+                    currentPage = index;
+                    updatePage(currentPage);
+                });
+            });
+            
+            // Initialiser l'état
+            updatePage(0);
+        }, 10);
     }
 };
 
