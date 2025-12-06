@@ -212,11 +212,15 @@ const App = {
         this.setupEventListeners();
         this.renderDecks();
         this.registerServiceWorker();
+        
+        // Afficher le popup d'aide lors de la première visite
+        this.checkFirstVisit();
     },
     
     setupEventListeners() {
         // Navigation
         document.getElementById('add-deck-btn').addEventListener('click', () => this.showAddDeckModal());
+        document.getElementById('help-btn').addEventListener('click', () => this.showHelpModal());
         document.getElementById('back-btn').addEventListener('click', () => this.showDecksView());
         document.getElementById('review-back-btn').addEventListener('click', () => this.showDeckDetailView());
         
@@ -1184,6 +1188,56 @@ const App = {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    },
+    
+    // ============================================
+    // AIDE ET PREMIÈRE VISITE
+    // ============================================
+    
+    checkFirstVisit() {
+        const hasVisited = localStorage.getItem('flashcards_hasVisited');
+        if (!hasVisited) {
+            // Afficher le popup d'aide après un court délai pour que la page soit chargée
+            setTimeout(() => {
+                this.showHelpModal();
+                localStorage.setItem('flashcards_hasVisited', 'true');
+            }, 500);
+        }
+    },
+    
+    showHelpModal() {
+        const content = `
+            <div style="line-height: 1.8;">
+                <h3 style="margin-top: 0; color: var(--primary-color); font-size: 20px;">📚 Qu'est-ce qu'une flashcard ?</h3>
+                
+                <p style="margin-bottom: 15px;">
+                    Une <strong>flashcard</strong> (carte flash) est un outil d'apprentissage efficace basé sur la répétition espacée. 
+                    C'est une carte avec une <strong>question</strong> sur le recto et la <strong>réponse</strong> sur le verso.
+                </p>
+                
+                <div style="background: var(--surface); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <p style="margin: 0; font-weight: 600; margin-bottom: 8px;">Exemple :</p>
+                    <p style="margin: 0; margin-bottom: 5px;"><strong>Question :</strong> "Bonjour"</p>
+                    <p style="margin: 0;"><strong>Réponse :</strong> "Hello"</p>
+                </div>
+                
+                <h4 style="margin-top: 20px; margin-bottom: 10px; font-size: 16px;">🎯 Comment ça fonctionne ?</h4>
+                <ol style="padding-left: 20px; margin-bottom: 15px;">
+                    <li style="margin-bottom: 8px;"><strong>Créez un deck</strong> : Organisez vos cartes par thème (ex: vocabulaire anglais, histoire, etc.)</li>
+                    <li style="margin-bottom: 8px;"><strong>Ajoutez des cartes</strong> : Pour chaque carte, entrez une question et sa réponse</li>
+                    <li style="margin-bottom: 8px;"><strong>Révisez régulièrement</strong> : L'application vous propose les cartes à réviser selon leur difficulté</li>
+                    <li style="margin-bottom: 8px;"><strong>Évaluez-vous</strong> : Après avoir vu la réponse, indiquez si c'était "Encore", "Bien" ou "Facile"</li>
+                </ol>
+                
+                <h4 style="margin-top: 20px; margin-bottom: 10px; font-size: 16px;">💡 Astuce</h4>
+                <p style="margin-bottom: 0;">
+                    Plus vous répondez correctement, moins la carte vous sera proposée. 
+                    Les cartes difficiles apparaîtront plus souvent jusqu'à ce que vous les maîtrisiez !
+                </p>
+            </div>
+        `;
+        
+        this.showModal('Bienvenue ! Guide des flashcards', content);
     }
 };
 
