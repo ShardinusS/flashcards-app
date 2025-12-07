@@ -34,40 +34,6 @@ const Icons = {
 };
 
 // ============================================
-// FIREBASE CLOUD MESSAGING (FCM)
-// ============================================
-
-// Configuration Firebase
-// ⚠️ La configuration est chargée depuis config.js (exclu du repo)
-// Vérifiez que config.js existe et contient les bonnes valeurs
-// Si config.js n'existe pas, copiez config.example.js en config.js et remplissez les valeurs
-
-// Les variables firebaseConfig et FCM_VAPID_KEY sont définies dans config.js
-// Vérification que la config est bien chargée
-if (typeof firebaseConfig === 'undefined') {
-  console.error('⚠️ ERREUR: config.js n\'est pas chargé ou firebaseConfig n\'est pas défini');
-  console.error('📝 Solution: Copiez config.example.js en config.js et remplissez avec vos valeurs Firebase');
-}
-if (typeof FCM_VAPID_KEY === 'undefined') {
-  console.error('⚠️ ERREUR: config.js n\'est pas chargé ou FCM_VAPID_KEY n\'est pas défini');
-  console.error('📝 Solution: Copiez config.example.js en config.js et remplissez avec votre clé VAPID');
-}
-
-// Initialiser Firebase si disponible
-let messaging = null;
-if (typeof firebase !== 'undefined' && typeof firebaseConfig !== 'undefined') {
-  try {
-    firebase.initializeApp(firebaseConfig);
-    messaging = firebase.messaging();
-    console.log('Firebase initialisé avec succès');
-  } catch (error) {
-    console.error('Erreur lors de l\'initialisation de Firebase:', error);
-  }
-} else if (typeof firebase !== 'undefined' && typeof firebaseConfig === 'undefined') {
-  console.warn('⚠️ Firebase SDK est disponible mais firebaseConfig n\'est pas défini. Vérifiez que config.js est chargé.');
-}
-
-// ============================================
 // GESTION DES DONNÉES
 // ============================================
 
@@ -322,13 +288,6 @@ const App = {
         
         // Vérifier et tester les notifications au démarrage
         this.testNotificationsOnStart();
-        
-        // S'abonner à FCM si les permissions sont accordées (NIVEAU 3)
-        if (Notification.permission === 'granted') {
-            this.subscribeToFCM().catch(err => {
-                console.log('Abonnement FCM non disponible:', err);
-            });
-        }
         
         // Afficher le popup d'aide lors de la première visite
         this.checkFirstVisit();
@@ -3058,8 +3017,6 @@ const App = {
             console.log('Permissions de notifications deja accordees');
             // Vérifier aussi la permission Periodic Background Sync si disponible
             await this.requestPeriodicSyncPermission();
-            // S'abonner à FCM si pas déjà fait
-            await this.subscribeToFCM();
             return Promise.resolve();
         }
         
@@ -3078,9 +3035,6 @@ const App = {
                 console.log('Permissions de notifications accordees !');
                 // Demander aussi la permission Periodic Background Sync
                 await this.requestPeriodicSyncPermission();
-                
-                // S'abonner à FCM (NIVEAU 3 - Firebase Cloud Messaging)
-                await this.subscribeToFCM();
                 
                 // Tester l'affichage d'une notification
                 if ('serviceWorker' in navigator) {
@@ -3105,108 +3059,6 @@ const App = {
         } catch (error) {
             console.error('Erreur lors de la demande de permission:', error);
             return Promise.reject();
-        }
-    },
-    
-    // ============================================
-    // NIVEAU 3: FIREBASE CLOUD MESSAGING (FCM)
-    // ============================================
-    
-    async subscribeToFCM() {
-        // Vérifier si Firebase Messaging est disponible
-        if (!messaging) {
-            console.log('Firebase Messaging non disponible');
-            return;
-        }
-        
-        // Vérifier que la permission est déjà accordée (ne pas redemander)
-        if (Notification.permission !== 'granted') {
-            console.log('Permission de notification non accordée, FCM ne peut pas fonctionner');
-            return;
-        }
-        
-        try {
-            // Enregistrer le service worker FCM (en plus du service worker principal)
-            if ('serviceWorker' in navigator) {
-                try {
-                    // Utiliser le même chemin relatif que le service worker principal
-                    await navigator.serviceWorker.register('./firebase-messaging-sw.js');
-                    console.log('Service Worker FCM enregistré');
-                } catch (error) {
-                    // Si le service worker FCM ne peut pas être enregistré, ce n'est pas bloquant
-                    // FCM peut fonctionner avec le service worker principal
-                    console.log('Service Worker FCM non enregistré (peut utiliser le service worker principal):', error.message);
-                }
-            }
-            
-            // Vérifier que la clé VAPID est disponible
-            const vapidKey = FCM_VAPID_KEY || localStorage.getItem('fcm_vapid_key');
-            if (!vapidKey) {
-                console.error('⚠️ ERREUR: FCM_VAPID_KEY n\'est pas défini dans config.js');
-                console.error('📝 Solution: Vérifiez que config.js contient FCM_VAPID_KEY ou copiez config.example.js en config.js');
-                return;
-            }
-            
-            try {
-                // Obtenir le token FCM (la permission est déjà accordée)
-                const token = await messaging.getToken({
-                    vapidKey: vapidKey
-                });
-                
-                if (token) {
-                    console.log('Token FCM obtenu:', token);
-                    
-                    // Sauvegarder le token dans localStorage
-                    localStorage.setItem('fcm_token', token);
-                    
-                    // Afficher le token dans la console pour faciliter les tests
-                    console.log('📱 TOKEN FCM (copiez-le pour envoyer des notifications depuis Firebase Console):', token);
-                    
-                    // Écouter les messages FCM quand l'app est ouverte
-                    messaging.onMessage((payload) => {
-                        console.log('Message FCM reçu (app ouverte):', payload);
-                        // La notification sera affichée automatiquement par FCM
-                    });
-                    
-                } else {
-                    console.warn('Aucun token FCM obtenu');
-                }
-            } catch (error) {
-                console.error('Erreur lors de l\'obtention du token FCM:', error);
-                if (error.code === 'messaging/permission-blocked') {
-                    console.log('Permission de notification bloquée');
-                } else if (error.code === 'messaging/invalid-vapid-key') {
-                    console.error('Clé VAPID invalide. Vérifiez votre configuration Firebase.');
-                } else if (error.code === 'messaging/failed-service-worker-registration') {
-                    console.log('Service worker non enregistré, FCM utilisera le service worker principal');
-                }
-            }
-        } catch (error) {
-            console.error('Erreur lors de l\'abonnement FCM:', error);
-        }
-    },
-    
-    // Obtenir le token FCM actuel
-    async getFCMToken() {
-        if (!messaging) {
-            return null;
-        }
-        
-        // Vérifier que la clé VAPID est disponible
-        const vapidKey = FCM_VAPID_KEY || localStorage.getItem('fcm_vapid_key');
-        if (!vapidKey) {
-            console.error('⚠️ ERREUR: FCM_VAPID_KEY n\'est pas défini dans config.js');
-            return null;
-        }
-        
-        try {
-            const token = await messaging.getToken({
-                vapidKey: vapidKey
-            });
-            return token;
-        } catch (error) {
-            console.error('Erreur lors de la récupération du token FCM:', error);
-            return null;
         }
     },
     
@@ -3333,15 +3185,9 @@ const App = {
     setupServiceWorkerMessageListener() {
         // Écouter les messages du service worker
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.addEventListener('message', async (event) => {
+            navigator.serviceWorker.addEventListener('message', (event) => {
                 if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
                     // Afficher une notification si nécessaire
-                } else if (event.data && event.data.type === 'SCHEDULE_FCM') {
-                    // Le service worker demande d'enregistrer une notification pour FCM
-                    console.log('[NIVEAU 3] Notification programmée pour FCM:', event.data.notification);
-                    // Note: Les notifications FCM sont envoyées depuis Firebase Console
-                    // Le token FCM est disponible dans localStorage.getItem('fcm_token')
-                    console.log('Token FCM disponible pour envoyer la notification:', localStorage.getItem('fcm_token'));
                 }
             });
         }

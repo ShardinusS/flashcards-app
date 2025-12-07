@@ -1,24 +1,37 @@
-# Dossier de fichiers qui ne doivent pas être dans le repo
+# Dossier pour les fichiers non versionnés
 no-repo/
-
-# Fichiers de configuration avec secrets (API keys, tokens, etc.)
-config.js
-config-sw.js
+decks_base/
 
 # Fichiers système
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Fichiers d'éditeur
+.vscode/
+.idea/
 *.swp
 *.swo
 *~
 
-# Fichiers de développement
-.vscode/
-.idea/
-
-# Logs
-*.log
-
 # Fichiers temporaires
 *.tmp
-*.temp
+*.log
+*.cache
+
+# Fichiers de sauvegarde
+*.bak
+*.backup
+
+# Fichiers de développement local
+.env
+.env.local
+
+# Node modules (si vous ajoutez des dépendances plus tard)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Fichiers de build (si vous ajoutez un build process)
+dist/
+build/

@@ -11,29 +11,6 @@ const urlsToCache = [
   // './icon-512.png'
 ];
 
-// ============================================
-// DÉTECTION DE PLATEFORME
-// ============================================
-
-// Détecter la plateforme pour choisir le meilleur niveau de notification
-function detectPlatform() {
-  const ua = self.navigator?.userAgent || '';
-  const isIOS = /iPhone|iPad|iPod/i.test(ua);
-  const isAndroid = /Android/i.test(ua);
-  const isDesktop = !isIOS && !isAndroid;
-  
-  return {
-    isIOS,
-    isAndroid,
-    isDesktop,
-    // Sur iOS, seul Web Push fonctionne
-    requiresWebPush: isIOS,
-    // Sur Android, on peut utiliser Scheduling API ou Background Sync
-    canUseScheduling: !isIOS && 'scheduledNotifications' in self.registration,
-    canUseBackgroundSync: !isIOS && 'sync' in self.registration
-  };
-}
-
 // Installation du Service Worker
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -324,7 +301,7 @@ async function checkScheduledNotifications() {
   });
 }
 
-// Programmer la prochaine notification avec sélection automatique du niveau
+// Programmer la prochaine notification
 async function scheduleNextNotification(notification) {
   if (!db) {
     await initDB();
@@ -342,105 +319,64 @@ async function scheduleNextNotification(notification) {
   
   store.put(notification);
   
-  // Détecter la plateforme pour choisir le meilleur niveau
-  const platform = detectPlatform();
-  
-  // NIVEAU 1: Notification Scheduling API (priorité absolue si disponible)
-  // Fonctionne même application fermée, hors ligne, et ne dépend pas du service worker actif
-  if (platform.canUseScheduling && 'scheduledNotifications' in self.registration) {
-    try {
-      // Récupérer toutes les notifications programmées existantes
-      const scheduledNotifications = await self.registration.scheduledNotifications.getAll();
-      
-      // Supprimer les anciennes notifications programmées pour ce rappel
-      for (const scheduledNotif of scheduledNotifications) {
-        if (scheduledNotif.data && 
-            scheduledNotif.data.deckId === notification.deckId && 
-            scheduledNotif.data.reminderId === notification.id) {
-          try {
-            await self.registration.scheduledNotifications.delete(scheduledNotif.id);
-          } catch (e) {
-            // Ignorer les erreurs de suppression
+  // PRIORITÉ 1: Essayer d'utiliser l'API Notification Scheduling si disponible
+  // C'est la meilleure solution pour les notifications en arrière-plan sur mobile
+  if ('Notification' in self && 'showNotification' in self.registration) {
+    // Vérifier si l'API scheduledNotifications est disponible
+    if ('scheduledNotifications' in self.registration) {
+      try {
+        // Récupérer toutes les notifications programmées existantes
+        const scheduledNotifications = await self.registration.scheduledNotifications.getAll();
+        
+        // Supprimer les anciennes notifications programmées pour ce rappel
+        for (const scheduledNotif of scheduledNotifications) {
+          if (scheduledNotif.data && 
+              scheduledNotif.data.deckId === notification.deckId && 
+              scheduledNotif.data.reminderId === notification.id) {
+            try {
+              await self.registration.scheduledNotifications.delete(scheduledNotif.id);
+            } catch (e) {
+              // Ignorer les erreurs de suppression
+            }
           }
         }
+        
+        // Programmer la nouvelle notification avec un timestamp absolu
+        await self.registration.scheduledNotifications.schedule({
+          title: 'Rappel de révision',
+          body: `Il est temps de réviser : ${notification.deckName || 'Vos flashcards'}`,
+          icon: './icon-1024.png',
+          badge: './icon-1024.png',
+          tag: `review-reminder-${notification.deckId}-${notification.id}`,
+          data: {
+            url: './index.html',
+            deckId: notification.deckId,
+            reminderId: notification.id,
+            deckName: notification.deckName,
+            timestamp: nextNotification
+          },
+          showTrigger: {
+            timestamp: nextNotification // Utiliser timestamp pour plus de précision
+          }
+        });
+        
+        console.log('Notification programmée avec Notification Scheduling API pour', new Date(nextNotification).toLocaleString());
+        return; // Utiliser cette méthode si disponible
+      } catch (error) {
+        // L'API n'est pas disponible ou a échoué, continuer avec Background Sync
+        console.log('Notification Scheduling API non disponible, utilisation de Background Sync:', error.message);
       }
-      
-      // Programmer la nouvelle notification avec un timestamp absolu
-      await self.registration.scheduledNotifications.schedule({
-        title: 'Rappel de révision',
-        body: `Il est temps de réviser : ${notification.deckName || 'Vos flashcards'}`,
-        icon: './icon-1024.png',
-        badge: './icon-1024.png',
-        tag: `review-reminder-${notification.deckId}-${notification.id}`,
-        data: {
-          url: './index.html',
-          deckId: notification.deckId,
-          reminderId: notification.id,
-          deckName: notification.deckName,
-          timestamp: nextNotification
-        },
-        showTrigger: {
-          timestamp: nextNotification // Utiliser timestamp pour plus de précision
-        }
-      });
-      
-      console.log('[NIVEAU 1] Notification programmée avec Notification Scheduling API pour', new Date(nextNotification).toLocaleString());
-      
-      // Même si on utilise Scheduling API, on enregistre aussi dans IndexedDB pour Web Push
-      // Le backend pourra utiliser ces données pour envoyer des push si nécessaire
-      await notifyClientForWebPush(notification, nextNotification);
-      
-      return; // Utiliser cette méthode si disponible
-    } catch (error) {
-      // L'API n'est pas disponible ou a échoué, continuer avec le niveau suivant
-      console.log('[NIVEAU 1] Notification Scheduling API non disponible, passage au niveau suivant:', error.message);
     }
   }
   
-  // NIVEAU 2: Background Sync (si pas iOS et Scheduling non disponible)
-  if (platform.canUseBackgroundSync && !platform.requiresWebPush) {
-    try {
-      // Programmer une synchronisation en arrière-plan pour la prochaine notification
-      await scheduleBackgroundSyncForNotification(notification);
-      console.log('[NIVEAU 2] Notification programmée avec Background Sync pour', new Date(nextNotification).toLocaleString());
-      
-      // Même si on utilise Background Sync, on enregistre aussi pour Web Push comme backup
-      await notifyClientForWebPush(notification, nextNotification);
-      
-      return;
-    } catch (error) {
-      console.log('[NIVEAU 2] Background Sync non disponible, passage au niveau 3:', error.message);
-    }
-  }
+  // PRIORITÉ 2: Utiliser Background Sync comme solution de secours
+  // Programmer une synchronisation en arrière-plan pour la prochaine notification
+  await scheduleBackgroundSyncForNotification(notification).catch(() => {
+    // Ignorer les erreurs de permission (normal sur desktop)
+  });
   
-  // NIVEAU 3: Web Push (obligatoire sur iOS, fallback général)
-  // Le backend doit être configuré pour envoyer les notifications
-  console.log('[NIVEAU 3] Utilisation de Web Push pour', new Date(nextNotification).toLocaleString());
-  await notifyClientForWebPush(notification, nextNotification);
-}
-
-// Notifier le client pour qu'il enregistre la notification pour FCM
-async function notifyClientForWebPush(notification, nextNotification) {
-  // Envoyer un message au client pour qu'il note que cette notification doit être envoyée via FCM
-  // Les notifications FCM sont envoyées depuis Firebase Console ou un backend Firebase
-  try {
-    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const client of clients) {
-      client.postMessage({
-        type: 'SCHEDULE_FCM',
-        notification: {
-          reminderId: notification.id,
-          deckId: notification.deckId,
-          deckName: notification.deckName,
-          nextNotification: nextNotification,
-          intervalMinutes: notification.intervalMinutes
-        }
-      });
-    }
-    console.log('[NIVEAU 3] Notification programmée pour FCM. Utilisez le token FCM pour envoyer depuis Firebase Console.');
-  } catch (error) {
-    console.log('Impossible de notifier le client pour FCM:', error);
-  }
+  // Ne plus programmer de setTimeout ici pour éviter les doublons
+  // La vérification périodique s'en chargera
 }
 
 // Écouter les messages du client
@@ -1064,13 +1000,6 @@ async function showReviewNotification(deckName = 'Vos flashcards', deckId = null
     }
   }
 }
-
-// ============================================
-// NIVEAU 3: FIREBASE CLOUD MESSAGING (FCM)
-// ============================================
-// Note: Les notifications FCM sont gérées par firebase-messaging-sw.js
-// Ce service worker (service-worker.js) gère les niveaux 1 et 2
-// FCM réveille automatiquement le service worker même si l'app est fermée
 
 // Gérer les clics sur les notifications
 self.addEventListener('notificationclick', (event) => {
