@@ -2699,20 +2699,43 @@ const App = {
         const savedReminders = JSON.parse(localStorage.getItem('flashcards_reminders') || '[]');
         const decks = Storage.getDecks();
         
-        // Synchroniser les rappels avec le service worker au chargement
-        if ('serviceWorker' in navigator) {
+        // Synchroniser les rappels depuis IndexedDB vers localStorage (une seule fois au chargement)
+        if ('serviceWorker' in navigator && !this._remindersSynced) {
+            this._remindersSynced = true;
             navigator.serviceWorker.ready.then(registration => {
-                savedReminders.forEach(reminder => {
-                    const deck = decks.find(d => d.id === reminder.deckId);
-                    if (deck && registration.active) {
-                        registration.active.postMessage({
-                            type: 'ADD_REMINDER',
+                // Récupérer tous les rappels depuis IndexedDB
+                const messageChannel = new MessageChannel();
+                messageChannel.port1.onmessage = (event) => {
+                    if (event.data.reminders) {
+                        // Synchroniser les rappels depuis IndexedDB vers localStorage
+                        const indexedDBReminders = event.data.reminders.map(reminder => ({
+                            id: reminder.id,
                             deckId: reminder.deckId,
-                            deckName: deck.name,
                             intervalMinutes: reminder.intervalMinutes
-                        });
+                        }));
+                        
+                        // Fusionner avec les rappels existants dans localStorage
+                        // Garder uniquement ceux qui existent dans IndexedDB
+                        const mergedReminders = indexedDBReminders;
+                        localStorage.setItem('flashcards_reminders', JSON.stringify(mergedReminders));
+                        
+                        // Recharger l'interface seulement si les rappels ont changé
+                        const currentReminders = JSON.parse(localStorage.getItem('flashcards_reminders') || '[]');
+                        const currentStr = JSON.stringify(currentReminders.sort((a, b) => (a.id || 0) - (b.id || 0)));
+                        const mergedStr = JSON.stringify(mergedReminders.sort((a, b) => (a.id || 0) - (b.id || 0)));
+                        if (currentStr !== mergedStr) {
+                            // Réinitialiser le flag pour permettre le rechargement
+                            this._remindersSynced = false;
+                            setTimeout(() => this.configureReviewReminders(), 100);
+                        }
                     }
-                });
+                };
+                
+                if (registration.active) {
+                    registration.active.postMessage({
+                        type: 'GET_ALL_REMINDERS'
+                    }, [messageChannel.port2]);
+                }
             });
         }
         
@@ -2790,12 +2813,12 @@ const App = {
                             const deckName = deck ? deck.name : 'Deck supprimé';
                             const intervalText = this.getIntervalText(reminder.intervalMinutes);
                             return `
-                                <div class="reminder-item" data-reminder-index="${index}">
+                                <div class="reminder-item" data-reminder-index="${index}" data-reminder-id="${reminder.id || ''}">
                                     <div class="reminder-item-content">
                                         <div class="reminder-item-title">${this.escapeHtml(deckName)}</div>
                                         <div class="reminder-item-details">Rappel : ${intervalText}</div>
                                     </div>
-                                    <button class="btn-remove-reminder" data-reminder-index="${index}">Supprimer</button>
+                                    <button class="btn-remove-reminder" data-reminder-index="${index}" data-reminder-id="${reminder.id || ''}">Supprimer</button>
                                 </div>
                             `;
                         }).join('')}
@@ -2869,38 +2892,70 @@ const App = {
                         return;
                     }
                     
-                    // Vérifier si un rappel existe déjà pour ce deck
-                    const existingIndex = savedReminders.findIndex(r => r.deckId === deckId);
-                    if (existingIndex >= 0) {
-                        savedReminders[existingIndex].intervalMinutes = intervalMinutes;
-                    } else {
-                        savedReminders.push({
-                            deckId: deckId,
-                            intervalMinutes: intervalMinutes
-                        });
+                    const deck = decks.find(d => d.id === deckId);
+                    const deckName = deck ? deck.name : 'Deck inconnu';
+                    
+                    // Vérifier si un rappel avec le même intervalle existe déjà pour ce deck
+                    const existingReminder = savedReminders.find(r => 
+                        r.deckId === deckId && r.intervalMinutes === intervalMinutes
+                    );
+                    
+                    if (existingReminder) {
+                        alert('Un rappel avec cet intervalle existe déjà pour ce deck.');
+                        return;
                     }
                     
+                    // Générer un ID unique pour le rappel
+                    const reminderId = Date.now() + Math.random();
+                    
+                    // Ajouter le rappel à localStorage
+                    savedReminders.push({
+                        id: reminderId,
+                        deckId: deckId,
+                        intervalMinutes: intervalMinutes
+                    });
                     localStorage.setItem('flashcards_reminders', JSON.stringify(savedReminders));
                     
                     // Demander la permission de notification si nécessaire
                     this.requestNotificationPermission().then(async () => {
-                        // Envoyer un message au service worker pour ajouter/mettre à jour le rappel
+                        // Envoyer un message au service worker pour ajouter le rappel
                         if ('serviceWorker' in navigator) {
                             try {
                                 const registration = await navigator.serviceWorker.ready;
-                                const deck = decks.find(d => d.id === deckId);
-                                const deckName = deck ? deck.name : 'Deck';
                                 
                                 // Utiliser le service worker actif ou en attente
                                 const worker = registration.active || registration.waiting || registration.installing;
                                 
                                 if (worker) {
+                                    const messageChannel = new MessageChannel();
+                                    messageChannel.port1.onmessage = (event) => {
+                                        if (event.data.isDuplicate) {
+                                            alert('Un rappel avec cet intervalle existe déjà pour ce deck.');
+                                            // Retirer le rappel de localStorage
+                                            savedReminders = savedReminders.filter(r => r.id !== reminderId);
+                                            localStorage.setItem('flashcards_reminders', JSON.stringify(savedReminders));
+                                            this.configureReviewReminders();
+                                        } else if (event.data.success) {
+                                            // Mettre à jour l'ID si le service worker en a généré un
+                                            if (event.data.reminderId && event.data.reminderId !== reminderId) {
+                                                const reminder = savedReminders.find(r => r.id === reminderId);
+                                                if (reminder) {
+                                                    reminder.id = event.data.reminderId;
+                                                    localStorage.setItem('flashcards_reminders', JSON.stringify(savedReminders));
+                                                }
+                                            }
+                                            console.log('Rappel ajoute avec succes, ID:', event.data.reminderId || reminderId);
+                                            this.configureReviewReminders();
+                                        }
+                                    };
+                                    
                                     worker.postMessage({
                                         type: 'ADD_REMINDER',
                                         deckId: deckId,
                                         deckName: deckName,
-                                        intervalMinutes: intervalMinutes
-                                    });
+                                        intervalMinutes: intervalMinutes,
+                                        reminderId: reminderId
+                                    }, [messageChannel.port2]);
                                     console.log('Rappel envoye au service worker:', deckName, intervalMinutes, 'minutes');
                                 } else {
                                     console.warn('Aucun service worker disponible');
@@ -2925,16 +2980,19 @@ const App = {
                     const index = parseInt(e.target.getAttribute('data-reminder-index'));
                     // Récupérer le rappel AVANT de le supprimer du tableau
                     const removedReminder = savedReminders[index];
+                    if (!removedReminder) return;
+                    
                     savedReminders.splice(index, 1);
                     localStorage.setItem('flashcards_reminders', JSON.stringify(savedReminders));
                     
-                    // Envoyer un message au service worker pour supprimer le rappel
-                    if ('serviceWorker' in navigator && removedReminder) {
+                    // Envoyer un message au service worker pour supprimer le rappel spécifique
+                    if ('serviceWorker' in navigator && removedReminder.id) {
                         navigator.serviceWorker.ready.then(registration => {
                             if (registration.active) {
                                 registration.active.postMessage({
                                     type: 'REMOVE_REMINDER',
-                                    deckId: removedReminder.deckId
+                                    reminderId: removedReminder.id,
+                                    deckId: removedReminder.deckId // Pour compatibilité
                                 });
                             }
                         }).catch(err => {

@@ -284,19 +284,35 @@ self.addEventListener('message', async (event) => {
   
   try {
     if (event.data.type === 'ADD_REMINDER') {
-      const { deckId, deckName, intervalMinutes } = event.data;
+      const { deckId, deckName, intervalMinutes, reminderId } = event.data;
       console.log('Ajout d\'un rappel:', deckName, intervalMinutes, 'minutes');
-      await addReminder(deckId, deckName, intervalMinutes);
-      console.log('Rappel ajoute avec succes');
+      const result = await addReminder(deckId, deckName, intervalMinutes, reminderId);
+      if (result.isDuplicate) {
+        console.log('Rappel deja existant, ignore');
+      } else {
+        console.log('Rappel ajoute avec succes, ID:', result.id);
+      }
       
-      // Répondre au client
+      // Répondre au client avec l'ID du rappel
       if (event.ports && event.ports[0]) {
-        event.ports[0].postMessage({ success: true, type: 'REMINDER_ADDED' });
+        event.ports[0].postMessage({ 
+          success: !result.isDuplicate, 
+          type: 'REMINDER_ADDED',
+          reminderId: result.id,
+          isDuplicate: result.isDuplicate
+        });
       }
     } else if (event.data.type === 'REMOVE_REMINDER') {
-      const { deckId } = event.data;
-      console.log('Suppression d\'un rappel:', deckId);
-      await removeReminder(deckId);
+      const { reminderId, deckId } = event.data;
+      // Si reminderId est fourni, supprimer ce rappel spécifique
+      // Sinon, supprimer tous les rappels pour ce deck (compatibilité)
+      if (reminderId) {
+        console.log('Suppression d\'un rappel specifique:', reminderId);
+        await removeReminderById(reminderId);
+      } else if (deckId) {
+        console.log('Suppression de tous les rappels pour le deck:', deckId);
+        await removeReminder(deckId);
+      }
       console.log('Rappel supprime avec succes');
       // Recalculer le prochain réveil après suppression
       await scheduleNextWakeUp();
@@ -336,7 +352,7 @@ self.addEventListener('message', async (event) => {
 });
 
 // Ajouter un rappel
-async function addReminder(deckId, deckName, intervalMinutes) {
+async function addReminder(deckId, deckName, intervalMinutes, reminderId = null) {
   if (!db) {
     await initDB();
   }
@@ -348,42 +364,64 @@ async function addReminder(deckId, deckName, intervalMinutes) {
     const store = transaction.objectStore('notifications');
     const index = store.index('deckId');
     
-    // Vérifier si un rappel existe déjà pour ce deck
-    const existingRequest = index.get(deckId);
-    existingRequest.onsuccess = async () => {
-      const existing = existingRequest.result;
-      const now = Date.now();
-      const nextNotification = now + (intervalMinutes * 60 * 1000);
-      
-      // Construire l'objet notification
-      const notification = {
-        deckId: deckId,
-        deckName: deckName,
-        intervalMinutes: intervalMinutes,
-        nextNotification: nextNotification,
-        lastNotification: null,
-        createdAt: existing ? existing.createdAt : now
-      };
-      
-      // Si un rappel existe déjà, inclure son ID pour la mise à jour
-      if (existing && existing.id) {
-        notification.id = existing.id;
+    // Vérifier si un rappel existe déjà pour ce deck avec le même intervalle
+    const request = index.openCursor(IDBKeyRange.only(deckId));
+    let existingReminder = null;
+    const allReminders = [];
+    
+    request.onsuccess = async (event) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        allReminders.push(cursor.value);
+        // Vérifier si c'est un doublon (même deckId et même intervalMinutes)
+        if (cursor.value.intervalMinutes === intervalMinutes) {
+          existingReminder = cursor.value;
+        }
+        cursor.continue();
+      } else {
+        // Si un rappel existe déjà avec le même intervalle, ne pas créer de doublon
+        if (existingReminder) {
+          console.log('Rappel deja existant pour ce deck avec cet intervalle, ignore');
+          resolve({ id: existingReminder.id, isDuplicate: true });
+          return;
+        }
+        
+        const now = Date.now();
+        const nextNotification = now + (intervalMinutes * 60 * 1000);
+        
+        // Construire l'objet notification
+        const notification = {
+          deckId: deckId,
+          deckName: deckName,
+          intervalMinutes: intervalMinutes,
+          nextNotification: nextNotification,
+          lastNotification: null,
+          createdAt: now
+        };
+        
+        // Si un reminderId est fourni (depuis localStorage), l'utiliser
+        if (reminderId) {
+          notification.id = reminderId;
+        }
+        // Sinon, laisser autoIncrement générer l'ID automatiquement
+        
+        const putRequest = store.put(notification);
+        putRequest.onsuccess = async () => {
+          // Récupérer l'ID généré si nécessaire
+          const finalId = notification.id || putRequest.result;
+          
+          // Programmer une synchronisation en arrière-plan pour cette notification
+          await scheduleBackgroundSyncForNotification(notification).catch(() => {
+            // Ignorer les erreurs de permission (normal sur desktop)
+          });
+          // Reprogrammer le prochain réveil pour inclure cette nouvelle notification
+          await scheduleNextWakeUp();
+          resolve({ id: finalId, isDuplicate: false });
+        };
+        putRequest.onerror = () => reject(putRequest.error);
       }
-      // Sinon, laisser autoIncrement générer l'ID automatiquement
-      
-      const putRequest = store.put(notification);
-      putRequest.onsuccess = async () => {
-        // Programmer une synchronisation en arrière-plan pour cette notification
-        await scheduleBackgroundSyncForNotification(notification).catch(() => {
-          // Ignorer les erreurs de permission (normal sur desktop)
-        });
-        // Reprogrammer le prochain réveil pour inclure cette nouvelle notification
-        await scheduleNextWakeUp();
-        resolve();
-      };
-      putRequest.onerror = () => reject(putRequest.error);
     };
-    existingRequest.onerror = () => reject(existingRequest.error);
+    request.onerror = () => reject(request.error);
   });
 }
 
@@ -413,7 +451,34 @@ async function scheduleBackgroundSyncForNotification(notification) {
   }
 }
 
-// Supprimer un rappel
+// Supprimer un rappel par son ID
+async function removeReminderById(reminderId) {
+  if (!db) {
+    await initDB();
+  }
+  
+  if (!db) return;
+  
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['notifications'], 'readwrite');
+    const store = transaction.objectStore('notifications');
+    
+    const deleteRequest = store.delete(reminderId);
+    deleteRequest.onsuccess = () => {
+      // Nettoyer aussi le cache des notifications récentes pour ce rappel
+      for (const [key] of recentNotifications.entries()) {
+        if (key.includes(`_${reminderId}_`) || key.endsWith(`_${reminderId}`)) {
+          recentNotifications.delete(key);
+        }
+      }
+      console.log(`Rappel supprime: ID ${reminderId}`);
+      resolve();
+    };
+    deleteRequest.onerror = () => reject(deleteRequest.error);
+  });
+}
+
+// Supprimer tous les rappels d'un deck (pour compatibilité)
 async function removeReminder(deckId) {
   if (!db) {
     await initDB();
