@@ -168,11 +168,7 @@ async function checkScheduledNotifications() {
   }
   
   if (!db) {
-<<<<<<< HEAD
     console.log('Base de donnees non initialisee');
-=======
-    console.log('⚠️ Base de données non initialisée');
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
     return 0;
   }
   
@@ -194,31 +190,19 @@ async function checkScheduledNotifications() {
         // Vérifier que la notification est vraiment due
         if (notification.nextNotification <= now) {
           notificationsToShow.push(notification);
-<<<<<<< HEAD
           console.log('Notification due trouvee:', notification.deckName, new Date(notification.nextNotification).toLocaleString());
-=======
-          console.log('📬 Notification due trouvée:', notification.deckName, new Date(notification.nextNotification).toLocaleString());
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
         }
         cursor.continue();
       } else {
         // Afficher toutes les notifications qui sont dues
         if (notificationsToShow.length > 0) {
-<<<<<<< HEAD
           console.log(`${notificationsToShow.length} notification(s) a afficher`);
-=======
-          console.log(`📬 ${notificationsToShow.length} notification(s) à afficher`);
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
           for (const notification of notificationsToShow) {
             try {
               await showReviewNotification(notification.deckName || 'Vos flashcards', notification.deckId);
               await scheduleNextNotification(notification);
             } catch (error) {
-<<<<<<< HEAD
               console.error('Erreur lors de l\'affichage de la notification:', error);
-=======
-              console.error('❌ Erreur lors de l\'affichage de la notification:', error);
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
             }
           }
           
@@ -231,11 +215,7 @@ async function checkScheduledNotifications() {
     };
     
     request.onerror = (error) => {
-<<<<<<< HEAD
       console.error('Erreur lors de la verification des notifications:', error);
-=======
-      console.error('❌ Erreur lors de la vérification des notifications:', error);
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
       resolve(0);
     };
   });
@@ -273,37 +253,23 @@ async function scheduleNextNotification(notification) {
 
 // Écouter les messages du client
 self.addEventListener('message', async (event) => {
-<<<<<<< HEAD
   console.log('Message recu dans le service worker:', event.data);
-=======
-  console.log('📨 Message reçu dans le service worker:', event.data);
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
   
   if (!db) {
     await initDB();
   }
   
   if (!event.data || !event.data.type) {
-<<<<<<< HEAD
     console.warn('Message sans type recu');
-=======
-    console.warn('⚠️ Message sans type reçu');
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
     return;
   }
   
   try {
     if (event.data.type === 'ADD_REMINDER') {
       const { deckId, deckName, intervalMinutes } = event.data;
-<<<<<<< HEAD
       console.log('Ajout d\'un rappel:', deckName, intervalMinutes, 'minutes');
       await addReminder(deckId, deckName, intervalMinutes);
       console.log('Rappel ajoute avec succes');
-=======
-      console.log('➕ Ajout d\'un rappel:', deckName, intervalMinutes, 'minutes');
-      await addReminder(deckId, deckName, intervalMinutes);
-      console.log('✅ Rappel ajouté avec succès');
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
       
       // Répondre au client
       if (event.ports && event.ports[0]) {
@@ -311,7 +277,6 @@ self.addEventListener('message', async (event) => {
       }
     } else if (event.data.type === 'REMOVE_REMINDER') {
       const { deckId } = event.data;
-<<<<<<< HEAD
       console.log('Suppression d\'un rappel:', deckId);
       await removeReminder(deckId);
       console.log('Rappel supprime avec succes');
@@ -319,15 +284,6 @@ self.addEventListener('message', async (event) => {
       // Synchroniser tous les rappels (pour compatibilité)
       const { reminders } = event.data;
       console.log('Mise a jour de tous les rappels:', reminders?.length || 0);
-=======
-      console.log('➖ Suppression d\'un rappel:', deckId);
-      await removeReminder(deckId);
-      console.log('✅ Rappel supprimé avec succès');
-    } else if (event.data.type === 'UPDATE_REMINDERS') {
-      // Synchroniser tous les rappels (pour compatibilité)
-      const { reminders } = event.data;
-      console.log('🔄 Mise à jour de tous les rappels:', reminders?.length || 0);
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
       if (reminders && Array.isArray(reminders)) {
         // Supprimer tous les rappels existants
         await cancelAllReminders();
@@ -335,19 +291,11 @@ self.addEventListener('message', async (event) => {
         for (const reminder of reminders) {
           await addReminder(reminder.deckId, reminder.deckName || 'Deck', reminder.intervalMinutes);
         }
-<<<<<<< HEAD
         console.log('Tous les rappels mis a jour');
       }
     } else if (event.data.type === 'GET_ALL_REMINDERS') {
       const reminders = await getAllReminders();
       console.log('Recuperation de tous les rappels:', reminders.length);
-=======
-        console.log('✅ Tous les rappels mis à jour');
-      }
-    } else if (event.data.type === 'GET_ALL_REMINDERS') {
-      const reminders = await getAllReminders();
-      console.log('📋 Récupération de tous les rappels:', reminders.length);
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
       if (event.ports && event.ports[0]) {
         event.ports[0].postMessage({ reminders });
       } else {
@@ -355,21 +303,12 @@ self.addEventListener('message', async (event) => {
         event.source.postMessage({ type: 'ALL_REMINDERS', reminders }, event.origin);
       }
     } else if (event.data.type === 'CANCEL_ALL_REMINDERS') {
-<<<<<<< HEAD
       console.log('Annulation de tous les rappels');
       await cancelAllReminders();
       console.log('Tous les rappels annules');
     }
   } catch (error) {
     console.error('Erreur lors du traitement du message:', error);
-=======
-      console.log('🗑️ Annulation de tous les rappels');
-      await cancelAllReminders();
-      console.log('✅ Tous les rappels annulés');
-    }
-  } catch (error) {
-    console.error('❌ Erreur lors du traitement du message:', error);
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
     if (event.ports && event.ports[0]) {
       event.ports[0].postMessage({ success: false, error: error.message });
     }
@@ -535,11 +474,7 @@ function startPeriodicCheck() {
     });
   }
   
-<<<<<<< HEAD
   console.log('Verification periodique des notifications demarree');
-=======
-  console.log('✅ Vérification périodique des notifications démarrée');
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
 }
 
 // Programmer le prochain réveil pour vérifier les notifications
@@ -699,11 +634,7 @@ function isWindows() {
 async function showReviewNotification(deckName = 'Vos flashcards', deckId = null) {
   // Vérifier que le service worker peut afficher des notifications
   if (!self.registration || !self.registration.showNotification) {
-<<<<<<< HEAD
     console.error('Service worker ne peut pas afficher de notifications');
-=======
-    console.error('❌ Service worker ne peut pas afficher de notifications');
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
     return;
   }
   
@@ -753,15 +684,9 @@ async function showReviewNotification(deckName = 'Vos flashcards', deckId = null
   try {
     // Afficher la notification
     await self.registration.showNotification(title, options);
-<<<<<<< HEAD
     console.log('Notification push affichee:', deckName, 'a', new Date().toLocaleTimeString());
   } catch (error) {
     console.error('Erreur lors de l\'affichage de la notification:', error);
-=======
-    console.log('✅ Notification push affichée:', deckName, 'à', new Date().toLocaleTimeString());
-  } catch (error) {
-    console.error('❌ Erreur lors de l\'affichage de la notification:', error);
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
     console.error('Détails de l\'erreur:', error.message, error.stack);
     
     // Essayer avec des options minimales en cas d'erreur
@@ -778,15 +703,9 @@ async function showReviewNotification(deckName = 'Vos flashcards', deckId = null
       }
       
       await self.registration.showNotification(title, minimalOptions);
-<<<<<<< HEAD
       console.log('Notification affichee avec options minimales');
     } catch (fallbackError) {
       console.error('Erreur critique lors de l\'affichage de la notification:', fallbackError);
-=======
-      console.log('✅ Notification affichée avec options minimales');
-    } catch (fallbackError) {
-      console.error('❌ Erreur critique lors de l\'affichage de la notification:', fallbackError);
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
       console.error('Détails de l\'erreur fallback:', fallbackError.message, fallbackError.stack);
     }
   }

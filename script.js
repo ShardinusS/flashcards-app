@@ -2813,15 +2813,9 @@ const App = {
                 testNotificationBtn.addEventListener('click', async () => {
                     await this.testNotificationNow();
                 });
-<<<<<<< HEAD
                 console.log('Bouton de test de notification attache');
             } else {
                 console.warn('Bouton de test de notification non trouve');
-=======
-                console.log('✅ Bouton de test de notification attaché');
-            } else {
-                console.warn('⚠️ Bouton de test de notification non trouvé');
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
             }
             
             // Gérer l'affichage du champ personnalisé
@@ -2907,30 +2901,17 @@ const App = {
                                         deckName: deckName,
                                         intervalMinutes: intervalMinutes
                                     });
-<<<<<<< HEAD
                                     console.log('Rappel envoye au service worker:', deckName, intervalMinutes, 'minutes');
                                 } else {
                                     console.warn('Aucun service worker disponible');
                                 }
                             } catch (error) {
                                 console.error('Erreur lors de l\'envoi du rappel au service worker:', error);
-=======
-                                    console.log('✅ Rappel envoyé au service worker:', deckName, intervalMinutes, 'minutes');
-                                } else {
-                                    console.warn('⚠️ Aucun service worker disponible');
-                                }
-                            } catch (error) {
-                                console.error('❌ Erreur lors de l\'envoi du rappel au service worker:', error);
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
                             }
                         }
                     }).catch(() => {
                         // Permission refusée, mais on sauvegarde quand même dans localStorage
-<<<<<<< HEAD
                         console.log('Permission de notification refusee');
-=======
-                        console.log('⚠️ Permission de notification refusée');
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
                     });
                     
                     // Recharger la modale pour afficher les changements
@@ -2986,20 +2967,12 @@ const App = {
     
     async requestNotificationPermission() {
         if (!('Notification' in window)) {
-<<<<<<< HEAD
             console.log('Les notifications ne sont pas supportees par ce navigateur.');
-=======
-            console.log('⚠️ Les notifications ne sont pas supportées par ce navigateur.');
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
             return Promise.resolve();
         }
         
         if (Notification.permission === 'granted') {
-<<<<<<< HEAD
             console.log('Permissions de notifications deja accordees');
-=======
-            console.log('✅ Permissions de notifications déjà accordées');
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
             // Vérifier aussi la permission Periodic Background Sync si disponible
             await this.requestPeriodicSyncPermission();
             return Promise.resolve();
@@ -3017,11 +2990,7 @@ const App = {
             console.log('📱 Permission de notifications:', permission);
             
             if (permission === 'granted') {
-<<<<<<< HEAD
                 console.log('Permissions de notifications accordees !');
-=======
-                console.log('✅ Permissions de notifications accordées !');
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
                 // Demander aussi la permission Periodic Background Sync
                 await this.requestPeriodicSyncPermission();
                 
@@ -3046,7 +3015,7 @@ const App = {
                 return Promise.reject();
             }
         } catch (error) {
-            console.error('❌ Erreur lors de la demande de permission:', error);
+            console.error('Erreur lors de la demande de permission:', error);
             return Promise.reject();
         }
     },
@@ -3089,15 +3058,9 @@ const App = {
                 try {
                     const registration = await navigator.serviceWorker.ready;
                     // Vérifier que le service worker peut afficher des notifications
-<<<<<<< HEAD
                     console.log('Permissions de notifications actives, service worker pret');
                 } catch (error) {
                     console.log('Service worker pas encore pret:', error);
-=======
-                    console.log('✅ Permissions de notifications actives, service worker prêt');
-                } catch (error) {
-                    console.log('⚠️ Service worker pas encore prêt:', error);
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
                 }
             }
         }
@@ -3105,11 +3068,7 @@ const App = {
     
     async testNotificationNow() {
         // Tester l'affichage d'une notification immédiatement
-<<<<<<< HEAD
         console.log('Test de notification...');
-=======
-        console.log('🧪 Test de notification...');
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
         
         if (!('Notification' in window)) {
             alert('Les notifications ne sont pas supportées par votre navigateur.');
@@ -3155,7 +3114,6 @@ const App = {
                 ]
             });
             
-<<<<<<< HEAD
             console.log('Notification de test envoyee avec succes !');
             
             // Attendre un peu avant d'afficher l'alerte pour laisser la notification s'afficher
@@ -3167,27 +3125,6 @@ const App = {
             console.error('Erreur lors du test de notification:', error);
             console.error('Details:', error.stack);
             alert('Erreur lors du test de notification :\n\n' + error.message + '\n\nVerifiez la console pour plus de details (F12 > Console).');
-=======
-            console.log('✅ Notification de test envoyée avec succès !');
-<<<<<<< HEAD
-            
-            // Attendre un peu avant d'afficher l'alerte pour laisser la notification s'afficher
-            setTimeout(() => {
-                alert('✅ Notification de test envoyée !\n\nSi vous ne la voyez pas :\n1. Vérifiez les paramètres de notifications de votre navigateur\n2. Vérifiez que les notifications ne sont pas en mode "Ne pas déranger"\n3. Regardez dans la barre de notifications de votre système');
-            }, 500);
-            
-        } catch (error) {
-            console.error('❌ Erreur lors du test de notification:', error);
-            console.error('Détails:', error.stack);
-            alert('❌ Erreur lors du test de notification :\n\n' + error.message + '\n\nVérifiez la console pour plus de détails (F12 > Console).');
-=======
-            alert('✅ Notification de test envoyée ! Si vous ne la voyez pas, vérifiez les paramètres de notifications de votre navigateur.');
-            
-        } catch (error) {
-            console.error('❌ Erreur lors du test de notification:', error);
-            alert('❌ Erreur lors du test de notification : ' + error.message + '\n\nVérifiez la console pour plus de détails (F12).');
->>>>>>> 6b3d28fa36af1d5835798e5c5f80d161a876d65a
->>>>>>> 727e0e82ed78987b3591b7598299d5a2dcf09737
         }
     },
     
