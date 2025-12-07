@@ -1,0 +1,77 @@
+{
+  "name": "Chapitre 4 - Loi binomiale",
+  "cards": [
+    {
+      "front": "Épreuve de Bernoulli",
+      "back": "Expérience aléatoire à 2 issues : succès ou échec"
+    },
+    {
+      "front": "Loi de Bernoulli paramètres",
+      "back": "p = probabilité succès, 1-p = probabilité échec"
+    },
+    {
+      "front": "Schéma de Bernoulli",
+      "back": "Répétition de n épreuves de Bernoulli identiques et indépendantes"
+    },
+    {
+      "front": "Coefficient binomial (k parmi n)",
+      "back": "Nombre de chemins avec k succès parmi n épreuves, noté (n k)"
+    },
+    {
+      "front": "(n 0)",
+      "back": "1"
+    },
+    {
+      "front": "(n 1)",
+      "back": "n"
+    },
+    {
+      "front": "(n n)",
+      "back": "1"
+    },
+    {
+      "front": "Relation triangle de Pascal",
+      "back": "(n k) + (n k+1) = (n+1 k+1)"
+    },
+    {
+      "front": "Loi binomiale notation",
+      "back": "B(n, p) où n = nombre d'épreuves, p = probabilité succès"
+    },
+    {
+      "front": "Formule P(X=k) pour B(n,p)",
+      "back": "P(X=k) = (n k) × pᵏ × (1-p)ⁿ⁻ᵏ"
+    },
+    {
+      "front": "Espérance E(X) pour B(n,p)",
+      "back": "E(X) = n × p"
+    },
+    {
+      "front": "Variance V(X) pour B(n,p)",
+      "back": "V(X) = n × p × (1-p)"
+    },
+    {
+      "front": "Écart-type σ(X) pour B(n,p)",
+      "back": "σ(X) = √[n × p × (1-p)]"
+    },
+    {
+      "front": "Exemple marche ivrogne",
+      "back": "n=20, p=0.5, B(20, 0.5)"
+    },
+    {
+      "front": "Calcul P(X=4) pour l'ivrogne",
+      "back": "P(X=4) = (20 4) × 0.5⁴ × 0.5¹⁶ ≈ 0.0046"
+    },
+    {
+      "front": "Valeurs espérance/écart-type ivrogne",
+      "back": "E(X)=10, σ(X)≈2.236"
+    },
+    {
+      "front": "Exemple lancer dé répété",
+      "back": "Expériences identiques et indépendantes"
+    },
+    {
+      "front": "Exemple tirage avec remise",
+      "back": "Urne : 10 tirages avec remise = schéma de Bernoulli"
+    }
+  ]
+}

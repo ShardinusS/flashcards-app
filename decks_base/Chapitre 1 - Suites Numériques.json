@@ -1,0 +1,89 @@
+{
+  "name": "Chapitre 1 - Suites Numériques",
+  "cards": [
+    {
+      "front": "Qu'est-ce qu'une suite numérique ?",
+      "back": "Une application définie de IN (ou une partie de IN) dans IR, notée (Un)."
+    },
+    {
+      "front": "Comment note-t-on le terme général d'une suite ?",
+      "back": "Un, où n est l'indice du terme."
+    },
+    {
+      "front": "Quelle est la différence entre une suite définie par une formule explicite et une suite définie par récurrence ?",
+      "back": "Explicite : Un = f(n). Récurrence : Un+1 = f(Un), avec premier terme donné."
+    },
+    {
+      "front": "Comment définit-on la croissance d'une suite (Un) ?",
+      "back": "Pour tout n, Un+1 ≥ Un."
+    },
+    {
+      "front": "Quelles sont les trois méthodes pour étudier le sens de variation d'une suite ?",
+      "back": "1) Signe de Un+1 - Un. 2) Si Un = f(n), étudier f. 3) Si Un > 0, comparer Un+1/Un à 1."
+    },
+    {
+      "front": "Qu'est-ce qu'une suite convergente ?",
+      "back": "Une suite qui tend vers une limite finie L quand n → +∞."
+    },
+    {
+      "front": "Définir une suite arithmétique.",
+      "back": "Suite où Un+1 = Un + r, r étant la raison."
+    },
+    {
+      "front": "Donner la formule explicite d'une suite arithmétique de premier terme U0 et de raison r.",
+      "back": "Un = U0 + n × r."
+    },
+    {
+      "front": "Comment varie une suite arithmétique selon le signe de sa raison r ?",
+      "back": "Si r > 0 : croissante. Si r < 0 : décroissante. Si r = 0 : constante."
+    },
+    {
+      "front": "Formule de la somme S = U0 + U1 + ... + Un pour une suite arithmétique.",
+      "back": "S = (nombre de termes) × (premier terme + dernier terme) / 2 = (n+1) × (U0 + Un) / 2."
+    },
+    {
+      "front": "Qu'est-ce qu'une suite géométrique ?",
+      "back": "Suite où Vn+1 = q × Vn, q étant la raison."
+    },
+    {
+      "front": "Donner la formule explicite d'une suite géométrique de premier terme V0 et de raison q.",
+      "back": "Vn = V0 × qⁿ"
+    },
+    {
+      "front": "Comment varie une suite géométrique (à termes positifs) selon la raison q ?",
+      "back": "Si q > 1 : croissante. Si 0 < q < 1 : décroissante. Si q = 1 : constante."
+    },
+    {
+      "front": "Formule de la somme S = V0 + V1 + ... + Vn pour une suite géométrique (q ≠ 1).",
+      "back": "S = V0 × (1 - qⁿ⁺¹) / (1 - q)"
+    },
+    {
+      "front": "Quelle est la formule de la somme 1 + q + q² + ... + qⁿ (q ≠ 1) ?",
+      "back": "(1 - qⁿ⁺¹) / (1 - q)"
+    },
+    {
+      "front": "Que représente la moyenne arithmétique de deux termes consécutifs d'une suite arithmétique ?",
+      "back": "Le terme situé exactement entre eux (c'est le terme du milieu si on a trois termes consécutifs)."
+    },
+    {
+      "front": "À quoi sert principalement la moyenne géométrique ?",
+      "back": "À calculer des taux moyens (multiplicatifs), par exemple des taux d'évolution annuels moyens."
+    },
+    {
+      "front": "Donner la formule de la moyenne géométrique de n valeurs positives x1, x2, ..., xn.",
+      "back": "G = ⁿ√(x1 × x2 × ... × xn) = (x1 × x2 × ... × xn)^{1/n}"
+    },
+    {
+      "front": "Si une suite est définie par Un = 2n - 10, que vaut U10 ?",
+      "back": "U10 = 2×10 - 10 = 10."
+    },
+    {
+      "front": "Une suite arithmétique a pour premier terme U0 = 7 et raison r = -2. Que vaut U3 ?",
+      "back": "U3 = 7 + 3×(-2) = 1."
+    },
+    {
+      "front": "Une suite géométrique a pour premier terme V0 = 12 et raison q = 1/2. Que vaut V3 ?",
+      "back": "V3 = 12 × (1/2)³ = 12 × 1/8 = 1.5"
+    }
+  ]
+}

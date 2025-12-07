@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-title" content="ShardCards">
     <meta name="theme-color" content="#2196F3">
     <meta name="mobile-web-app-capable" content="yes">
-    <title>ShardCards - AnkiApp Style</title>
+    <title>ShardCards</title>
     <!-- 
       PERSONNALISATION :
       - apple-mobile-web-app-title : Nom affiché sous l'icône sur iPhone (max 12 caractères)
@@ -37,7 +37,8 @@
     <!-- Écran principal - Liste des decks -->
     <div id="decks-view" class="view active">
         <header>
-            <h1>Mes Decks</h1>
+            <img src="icon-1024.png" alt="ShardCards" class="header-logo">
+            <h1 class="header-title">ShardCards</h1>
             <div class="header-actions">
                 <button id="hamburger-menu-btn" class="icon-btn" aria-label="Menu" title="Menu">
                     <span class="icon-svg icon-menu"></span>
@@ -45,8 +46,28 @@
             </div>
         </header>
         
+        <!-- Sections de navigation -->
+        <div class="deck-sections">
+            <button class="deck-section-btn active" data-section="my-decks">
+                <span>Mes Decks</span>
+            </button>
+            <button class="deck-section-btn" data-section="base-decks">
+                <span>Decks de Base</span>
+            </button>
+        </div>
+        
+        <!-- Conteneur pour Mes Decks -->
+        <div id="my-decks-container" class="decks-section-content active">
         <div id="decks-container" class="decks-grid">
             <!-- Les decks seront ajoutés dynamiquement ici -->
+            </div>
+        </div>
+        
+        <!-- Conteneur pour Decks de Base -->
+        <div id="base-decks-container" class="decks-section-content">
+            <div id="base-decks-grid" class="decks-grid">
+                <!-- Les decks de base seront ajoutés dynamiquement ici -->
+            </div>
         </div>
         
         <div class="fab-container">

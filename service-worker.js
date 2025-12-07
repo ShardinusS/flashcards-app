@@ -240,6 +240,17 @@ self.addEventListener('message', async (event) => {
   } else if (event.data && event.data.type === 'REMOVE_REMINDER') {
     const { deckId } = event.data;
     await removeReminder(deckId);
+  } else if (event.data && event.data.type === 'UPDATE_REMINDERS') {
+    // Synchroniser tous les rappels (pour compatibilité)
+    const { reminders } = event.data;
+    if (reminders && Array.isArray(reminders)) {
+      // Supprimer tous les rappels existants
+      await cancelAllReminders();
+      // Ajouter les nouveaux rappels
+      for (const reminder of reminders) {
+        await addReminder(reminder.deckId, reminder.deckName || 'Deck', reminder.intervalMinutes);
+      }
+    }
   } else if (event.data && event.data.type === 'GET_ALL_REMINDERS') {
     const reminders = await getAllReminders();
     if (event.ports && event.ports[0]) {
@@ -412,15 +423,13 @@ function isWindows() {
 
 // Afficher une notification de rappel (uniquement notifications système pour mobile)
 async function showReviewNotification(deckName = 'Vos flashcards', deckId = null) {
-  // Toujours afficher une notification système native (pour mobile)
-  // Sur desktop, cette fonction ne sera jamais appelée car les rappels sont désactivés
   const title = 'Rappel de révision';
   const options = {
     body: `Il est temps de réviser : ${deckName}`,
     // Les icônes sont optionnelles
     // icon: './icon-192.png',
     // badge: './icon-192.png',
-    tag: 'review-reminder',
+    tag: `review-reminder-${deckId || 'default'}`,
     requireInteraction: false,
     vibrate: [200, 100, 200],
     data: {
@@ -439,7 +448,11 @@ async function showReviewNotification(deckName = 'Vos flashcards', deckId = null
     ]
   };
   
-  self.registration.showNotification(title, options);
+  try {
+    await self.registration.showNotification(title, options);
+  } catch (error) {
+    console.error('Erreur lors de l\'affichage de la notification:', error);
+  }
 }
 
 // Gérer les clics sur les notifications

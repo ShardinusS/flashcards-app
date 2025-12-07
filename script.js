@@ -39,12 +39,27 @@ const Icons = {
 
 const Storage = {
     getDecks() {
-        const data = localStorage.getItem('flashcards_decks');
-        return data ? JSON.parse(data) : [];
+        try {
+            const data = localStorage.getItem('flashcards_decks');
+            if (!data) return [];
+            return JSON.parse(data);
+        } catch (error) {
+            console.error('Erreur lors de la lecture des decks:', error);
+            return [];
+        }
     },
     
     saveDecks(decks) {
-        localStorage.setItem('flashcards_decks', JSON.stringify(decks));
+        try {
+            localStorage.setItem('flashcards_decks', JSON.stringify(decks));
+        } catch (error) {
+            console.error('Erreur lors de la sauvegarde des decks:', error);
+            if (error.name === 'QuotaExceededError') {
+                alert('L\'espace de stockage est plein. Veuillez supprimer certains decks.');
+            } else {
+                alert('Erreur lors de la sauvegarde. Veuillez réessayer.');
+            }
+        }
     },
     
     getDeck(id) {
@@ -230,6 +245,8 @@ const ColorZones = {
 
 const App = {
     currentDeckId: null,
+    currentIsBaseDeck: false, // Indique si le deck actuel est un deck de base
+    baseDecks: [], // Stockage des decks de base
     currentView: 'decks',
     isGridView: true,
     reviewCards: [],
@@ -248,7 +265,20 @@ const App = {
         this.initIcons();
         
         this.setupEventListeners();
+        
+        // S'assurer que la vue initiale est visible
+        const initialView = document.querySelector('.view.active');
+        if (initialView) {
+            initialView.style.opacity = '1';
+            initialView.style.display = 'flex';
+        }
+        
         this.renderDecks();
+        // S'assurer que le bouton d'ajout est visible au démarrage (section "Mes Decks" par défaut)
+        const addDeckBtn = document.getElementById('add-deck-btn');
+        if (addDeckBtn) {
+            addDeckBtn.style.display = 'flex';
+        }
         this.registerServiceWorker();
         
         // Restaurer les rappels de révision si configurés (uniquement sur mobile)
@@ -267,9 +297,24 @@ const App = {
     restoreReviewReminders() {
         // Les rappels sont maintenant stockés dans IndexedDB du service worker
         // Ils seront automatiquement restaurés par le service worker
-        // On vérifie juste que le service worker est actif
-        if (this.serviceWorkerRegistration) {
-            // Le service worker vérifiera automatiquement les notifications au démarrage
+        // On synchronise les rappels depuis localStorage vers le service worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then(registration => {
+                const savedReminders = JSON.parse(localStorage.getItem('flashcards_reminders') || '[]');
+                const decks = Storage.getDecks();
+                
+                savedReminders.forEach(reminder => {
+                    const deck = decks.find(d => d.id === reminder.deckId);
+                    if (deck && registration.active) {
+                        registration.active.postMessage({
+                            type: 'ADD_REMINDER',
+                            deckId: reminder.deckId,
+                            deckName: deck.name,
+                            intervalMinutes: reminder.intervalMinutes
+                        });
+                    }
+                });
+            });
         }
     },
     
@@ -297,11 +342,61 @@ const App = {
     },
     
     setupEventListeners() {
+        // Gestion des sections (Mes Decks / Decks de Base)
+        const sectionButtons = document.querySelectorAll('.deck-section-btn');
+        sectionButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const section = e.currentTarget.dataset.section;
+                if (section) {
+                    this.switchDeckSection(section);
+                }
+            });
+        });
+        
         // Navigation
-        document.getElementById('add-deck-btn').addEventListener('click', () => this.showAddDeckModal());
-        document.getElementById('help-btn').addEventListener('click', () => this.showHelpModal());
-        document.getElementById('back-btn').addEventListener('click', () => this.showDecksView());
-        document.getElementById('review-back-btn').addEventListener('click', () => this.showDeckDetailView());
+        const addDeckBtn = document.getElementById('add-deck-btn');
+        const helpBtn = document.getElementById('help-btn');
+        const backBtn = document.getElementById('back-btn');
+        const reviewBackBtn = document.getElementById('review-back-btn');
+        
+        if (addDeckBtn) {
+            addDeckBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.showAddDeckModal();
+            });
+        }
+        
+        if (helpBtn) {
+            helpBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.showHelpModal();
+            });
+        }
+        
+        if (backBtn) {
+            backBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.showDecksView();
+            });
+        }
+        
+        if (reviewBackBtn) {
+            reviewBackBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                // Retourner au détail du deck si on a un deckId, sinon aux decks
+                if (this.currentDeckId) {
+                    this.showDeckDetailView();
+                } else {
+                    this.showDecksView();
+                }
+            });
+        }
         
         // Menu hamburger
         document.getElementById('hamburger-menu-btn').addEventListener('click', () => this.showHamburgerMenu('decks'));
@@ -319,11 +414,45 @@ const App = {
         // Card actions
         document.getElementById('add-card-btn').addEventListener('click', () => this.showAddCardModal());
         
-        // Review
-        document.getElementById('review-card').addEventListener('click', () => this.revealAnswer());
-        document.getElementById('again-btn').addEventListener('click', () => this.rateCard(0));
-        document.getElementById('good-btn').addEventListener('click', () => this.rateCard(1));
-        document.getElementById('easy-btn').addEventListener('click', () => this.rateCard(2));
+        // Review - Attacher les event listeners une seule fois car les boutons sont statiques
+        const reviewCard = document.getElementById('review-card');
+        if (reviewCard) {
+            reviewCard.addEventListener('click', () => this.revealAnswer());
+        }
+        
+        const againBtn = document.getElementById('again-btn');
+        const goodBtn = document.getElementById('good-btn');
+        const easyBtn = document.getElementById('easy-btn');
+        
+        if (againBtn) {
+            againBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (this.isRevealed) {
+                    this.rateCard(0);
+                }
+            });
+        }
+        
+        if (goodBtn) {
+            goodBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (this.isRevealed) {
+                    this.rateCard(1);
+                }
+            });
+        }
+        
+        if (easyBtn) {
+            easyBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (this.isRevealed) {
+                    this.rateCard(2);
+                }
+            });
+        }
         
         // Modal
         document.querySelector('.modal-close').addEventListener('click', () => this.hideModal());
@@ -339,14 +468,48 @@ const App = {
     // ============================================
     
     showView(viewName) {
-        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-        document.getElementById(`${viewName}-view`).classList.add('active');
+        const currentActiveView = document.querySelector('.view.active');
+        const newView = document.getElementById(`${viewName}-view`);
+        
+        if (!newView) {
+            console.error('Vue non trouvée:', viewName);
+            return;
+        }
+        
+        // Si c'est la même vue, ne rien faire
+        if (currentActiveView === newView) {
+            return;
+        }
+        
+        // Annuler toute animation en cours
+        if (currentActiveView) {
+            currentActiveView.classList.remove('active', 'fade-out', 'fade-in');
+            currentActiveView.style.display = 'none';
+        }
+        
+        // Afficher la nouvelle vue immédiatement, animation en arrière-plan
+        newView.classList.remove('fade-out', 'fade-in');
+        newView.style.display = 'flex';
+        newView.style.opacity = '1';
+        newView.classList.add('active');
         this.currentView = viewName;
+        
+        // Animation en arrière-plan, mais la vue est déjà active
+        requestAnimationFrame(() => {
+            newView.style.opacity = '0';
+            newView.style.transform = 'translateY(10px)';
+            setTimeout(() => {
+                newView.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                newView.style.opacity = '1';
+                newView.style.transform = 'translateY(0)';
+            }, 10);
+        });
     },
     
     showDecksView() {
         this.showView('decks');
         this.currentDeckId = null;
+        this.currentIsBaseDeck = false; // Réinitialiser le flag
         this.renderDecks();
     },
     
@@ -354,43 +517,46 @@ const App = {
         // Si un deckId est fourni, l'utiliser, sinon utiliser le currentDeckId
         if (deckId) {
             this.currentDeckId = deckId;
+            // Vérifier si c'est un deck de base
+            if (this.baseDecks && this.baseDecks.find(d => d.id === deckId)) {
+                this.currentIsBaseDeck = true;
+            } else {
+                this.currentIsBaseDeck = false;
+            }
+        } else {
+            // Si pas de deckId fourni, vérifier le currentDeckId
+            if (this.currentDeckId) {
+                if (this.baseDecks && this.baseDecks.find(d => d.id === this.currentDeckId)) {
+                    this.currentIsBaseDeck = true;
+                } else {
+                    this.currentIsBaseDeck = false;
+                }
+            } else {
+                // Si pas de currentDeckId, retourner à la vue des decks
+                this.showDecksView();
+                return;
+            }
         }
-        if (!this.currentDeckId) return;
+        
+        if (!this.currentDeckId) {
+            this.showDecksView();
+            return;
+        }
+        
+        // S'assurer que les boutons sont correctement affichés
+        const addCardBtn = document.getElementById('add-card-btn');
+        if (addCardBtn) {
+            if (this.currentIsBaseDeck) {
+                addCardBtn.style.display = 'none';
+            } else {
+                addCardBtn.style.display = 'flex';
+            }
+        }
+        
         this.showView('deck-detail');
         this.renderCards();
     },
     
-    showReviewView() {
-        if (!this.currentDeckId) return;
-        const deck = Storage.getDeck(this.currentDeckId);
-        if (!deck) return;
-        
-        // Limiter le nombre de cartes selon la configuration
-        this.reviewCards = SM2.getCardsToReview(deck, this.cardsPerSession);
-        if (this.reviewCards.length === 0) {
-            alert('Aucune carte dans ce deck !');
-            return;
-        }
-        
-        this.currentReviewIndex = 0;
-        this.isRevealed = false;
-        this.showView('review');
-        
-        // Attendre que la vue soit complètement affichée avant de rendre la carte
-        // Utiliser requestAnimationFrame pour s'assurer que le DOM est prêt
-        requestAnimationFrame(() => {
-        setTimeout(() => {
-                // Vérifier à nouveau que les cartes sont toujours disponibles
-                if (this.reviewCards && this.reviewCards.length > 0) {
-            this.renderReviewCard();
-                } else {
-                    console.error('Les cartes de révision ont été perdues');
-                    // Retourner à la vue du deck si les cartes ne sont plus disponibles
-                    this.showDeckDetailView();
-                }
-            }, 50);
-        });
-    },
     
     toggleView() {
         this.isGridView = !this.isGridView;
@@ -440,6 +606,11 @@ const App = {
                     this.showStatsModal();
                     this.hideHamburgerMenu();
                 }},
+            ];
+            
+            // Ne pas afficher les options d'édition/export pour les decks de base
+            if (!this.currentIsBaseDeck) {
+                items.push(
                 { icon: 'upload', text: 'Exporter', action: () => {
                     this.exportDeck();
                     this.hideHamburgerMenu();
@@ -447,8 +618,9 @@ const App = {
                 { icon: 'edit', text: 'Modifier le deck', action: () => {
                     this.showEditDeckModal();
                     this.hideHamburgerMenu();
-                }},
-            ];
+                    }}
+                );
+            }
         }
         
         menuItems.innerHTML = items.map((item, index) => `
@@ -488,6 +660,159 @@ const App = {
     },
     
     // ============================================
+    // HELPERS
+    // ============================================
+    
+    // Récupérer un deck (base ou normal) par son ID
+    getDeck(deckId, isBaseDeck = false) {
+        if (isBaseDeck) {
+            // S'assurer que baseDecks est initialisé
+            if (!this.baseDecks || this.baseDecks.length === 0) {
+                // Initialiser les decks de base directement sans appeler renderBaseDecks
+                this.baseDecks = this.getBaseDecksData();
+            }
+            return this.baseDecks.find(d => d.id === deckId);
+        } else {
+            return Storage.getDeck(deckId);
+        }
+    },
+    
+    // Retourner les données des decks de base (sans modifier le DOM)
+    getBaseDecksData() {
+        return [
+            {
+                id: 'base-chapitre-1',
+                name: 'Chapitre 1 - Suites Numériques',
+                cards: [
+                    { front: "Qu'est-ce qu'une suite numérique ?", back: "Une application définie de IN (ou une partie de IN) dans IR, notée (Un)." },
+                    { front: "Comment note-t-on le terme général d'une suite ?", back: "Un, où n est l'indice du terme." },
+                    { front: "Quelle est la différence entre une suite définie par une formule explicite et une suite définie par récurrence ?", back: "Explicite : Un = f(n). Récurrence : Un+1 = f(Un), avec premier terme donné." },
+                    { front: "Comment définit-on la croissance d'une suite (Un) ?", back: "Pour tout n, Un+1 ≥ Un." },
+                    { front: "Quelles sont les trois méthodes pour étudier le sens de variation d'une suite ?", back: "1) Signe de Un+1 - Un. 2) Si Un = f(n), étudier f. 3) Si Un > 0, comparer Un+1/Un à 1." },
+                    { front: "Qu'est-ce qu'une suite convergente ?", back: "Une suite qui tend vers une limite finie L quand n → +∞." },
+                    { front: "Définir une suite arithmétique.", back: "Suite où Un+1 = Un + r, r étant la raison." },
+                    { front: "Donner la formule explicite d'une suite arithmétique de premier terme U0 et de raison r.", back: "Un = U0 + n × r." },
+                    { front: "Comment varie une suite arithmétique selon le signe de sa raison r ?", back: "Si r > 0 : croissante. Si r < 0 : décroissante. Si r = 0 : constante." },
+                    { front: "Formule de la somme S = U0 + U1 + ... + Un pour une suite arithmétique.", back: "S = (nombre de termes) × (premier terme + dernier terme) / 2 = (n+1) × (U0 + Un) / 2." },
+                    { front: "Qu'est-ce qu'une suite géométrique ?", back: "Suite où Vn+1 = q × Vn, q étant la raison." },
+                    { front: "Donner la formule explicite d'une suite géométrique de premier terme V0 et de raison q.", back: "Vn = V0 × qⁿ" },
+                    { front: "Comment varie une suite géométrique (à termes positifs) selon la raison q ?", back: "Si q > 1 : croissante. Si 0 < q < 1 : décroissante. Si q = 1 : constante." },
+                    { front: "Formule de la somme S = V0 + V1 + ... + Vn pour une suite géométrique (q ≠ 1).", back: "S = V0 × (1 - qⁿ⁺¹) / (1 - q)" },
+                    { front: "Quelle est la formule de la somme 1 + q + q² + ... + qⁿ (q ≠ 1) ?", back: "(1 - qⁿ⁺¹) / (1 - q)" },
+                    { front: "Que représente la moyenne arithmétique de deux termes consécutifs d'une suite arithmétique ?", back: "Le terme situé exactement entre eux (c'est le terme du milieu si on a trois termes consécutifs)." },
+                    { front: "À quoi sert principalement la moyenne géométrique ?", back: "À calculer des taux moyens (multiplicatifs), par exemple des taux d'évolution annuels moyens." },
+                    { front: "Donner la formule de la moyenne géométrique de n valeurs positives x1, x2, ..., xn.", back: "G = ⁿ√(x1 × x2 × ... × xn) = (x1 × x2 × ... × xn)^{1/n}" },
+                    { front: "Si une suite est définie par Un = 2n - 10, que vaut U10 ?", back: "U10 = 2×10 - 10 = 10." },
+                    { front: "Une suite arithmétique a pour premier terme U0 = 7 et raison r = -2. Que vaut U3 ?", back: "U3 = 7 + 3×(-2) = 1." },
+                    { front: "Une suite géométrique a pour premier terme V0 = 12 et raison q = 1/2. Que vaut V3 ?", back: "V3 = 12 × (1/2)³ = 12 × 1/8 = 1.5" }
+                ]
+            },
+            {
+                id: 'base-chapitre-2',
+                name: 'Chapitre 2 - Limites de fonctions',
+                cards: [
+                    { front: "Limite de f en +∞ égale à +∞", back: "f(x) aussi grand que voulu quand x assez grand" },
+                    { front: "Limite de f en +∞ égale à -∞", back: "f(x) aussi petit que voulu quand x assez grand" },
+                    { front: "Limite finie en +∞", back: "f(x) se rapproche de ℓ quand x assez grand" },
+                    { front: "Asymptote horizontale", back: "Droite y = k si lim f(x) = k en ±∞" },
+                    { front: "Asymptote verticale", back: "Droite x = a si lim f(x) = ±∞ en a" },
+                    { front: "Limite en un point pour fonctions usuelles", back: "Si a dans le domaine, lim f(x) = f(a)" },
+                    { front: "Limite de x^n en +∞", back: "+∞" },
+                    { front: "Limite de x^n en -∞ si n pair", back: "+∞" },
+                    { front: "Limite de x^n en -∞ si n impair", back: "-∞" },
+                    { front: "Limite de √x en +∞", back: "+∞" },
+                    { front: "Limite de 1/x en ±∞", back: "0" },
+                    { front: "Limite de 1/x en 0⁺", back: "+∞" },
+                    { front: "Limite de 1/x en 0⁻", back: "-∞" },
+                    { front: "Limite somme : f→a et g→b", back: "f+g → a+b" },
+                    { front: "Limite somme : f→+∞ et g→+∞", back: "f+g → +∞" },
+                    { front: "Forme indéterminée somme", back: "f→-∞ et g→+∞" },
+                    { front: "Limite produit : f→a et g→b", back: "f×g → a×b" },
+                    { front: "Limite produit : f→+∞ et g→+∞", back: "f×g → +∞" },
+                    { front: "Forme indéterminée produit", back: "f→0 et g→±∞" },
+                    { front: "Produit par constante k", back: "Si f→+∞, kf→+∞ si k>0, -∞ si k<0" },
+                    { front: "Limite de u^n", back: "Si u→a, u^n→a^n. Si u→+∞, u^n→+∞" },
+                    { front: "Limite de 1/u si u→±∞", back: "1/u → 0" },
+                    { front: "Limite de 1/u si u→0⁺", back: "+∞" },
+                    { front: "Limite de 1/u si u→0⁻", back: "-∞" },
+                    { front: "Limite quotient : f→a et g→b≠0", back: "f/g → a/b" },
+                    { front: "Limite quotient : f→a et g→±∞", back: "f/g → 0" },
+                    { front: "Exemple (x+1)/(x-3) en 3", back: "4/0⁻ = -∞, asymptote x=3" },
+                    { front: "Continuité en a", back: "lim f(x) = f(a)" },
+                    { front: "Exemple asymptote horizontale", back: "1/x : y=0 asymptote en ±∞" },
+                    { front: "Exemple asymptote verticale", back: "1/x : x=0 asymptote" }
+                ]
+            },
+            {
+                id: 'base-chapitre-3',
+                name: 'Chapitre 3 - Dérivation et Variations',
+                cards: [
+                    { front: "Taux de variation entre a et b", back: "f(b) - f(a) / (b - a)" },
+                    { front: "Signification géométrique du taux de variation", back: "Coefficient directeur de la sécante (AB)" },
+                    { front: "Définition du nombre dérivé f'(x₀)", back: "lim (h→0) [f(x₀+h) - f(x₀)]/h" },
+                    { front: "Equation de la tangente en x₀", back: "y = f'(x₀)(x - x₀) + f(x₀)" },
+                    { front: "Dérivée de f(x) = a (constante)", back: "f'(x) = 0" },
+                    { front: "Dérivée de f(x) = ax + b", back: "f'(x) = a" },
+                    { front: "Dérivée de f(x) = ax² + bx + c", back: "f'(x) = 2ax + b" },
+                    { front: "Dérivée de f(x) = xⁿ (n entier > 0)", back: "f'(x) = nxⁿ⁻¹" },
+                    { front: "Dérivée de f(x) = 1/x", back: "f'(x) = -1/x²" },
+                    { front: "Dérivée de f(x) = 1/xⁿ", back: "f'(x) = -n/xⁿ⁺¹" },
+                    { front: "Dérivée de f(x) = √x", back: "f'(x) = 1/(2√x)" },
+                    { front: "Dérivée de f(x) = √(ax+b)", back: "f'(x) = a/(2√(ax+b))" },
+                    { front: "Relation entre dérivée et sens de variation", back: "f' ≥ 0 ⇒ f croissante, f' ≤ 0 ⇒ f décroissante, f' = 0 ⇒ f constante" },
+                    { front: "Dérivée d'une somme (u+v)'", back: "u' + v'" },
+                    { front: "Dérivée d'un produit (uv)'", back: "u'v + uv'" },
+                    { front: "Dérivée d'un quotient (u/v)'", back: "(u'v - uv')/v²" },
+                    { front: "Dérivée de ku (k constante)", back: "ku'" },
+                    { front: "Dérivée de 1/v", back: "-v'/v²" },
+                    { front: "Propriété fonction paire/dérivée", back: "f paire ⇒ f' impaire, f impaire ⇒ f' paire" },
+                    { front: "Extremum en x₀", back: "f'(x₀) = 0 et f' change de signe en x₀" },
+                    { front: "Fonction inverse f(x) = 1/x", back: "Définie sur ℝ*, décroissante sur ℝ⁻* et ℝ⁺*" },
+                    { front: "Symétrie de la fonction inverse", back: "f(x) = -f(-x) ⇒ symétrie par rapport à l'origine" },
+                    { front: "Equation 1/x = k (k réel)", back: "Une solution si k ≠ 0 : x = 1/k, aucune solution si k = 0" },
+                    { front: "Inéquation 1/x > 3", back: "Solution : x ∈ ]0, 1/3[" },
+                    { front: "Inéquation 1/x < 2", back: "Solution : x ∈ ]-∞, 0[ ∪ ]1/2, +∞[" },
+                    { front: "Dérivée de P(x) + 1/x (P polynôme)", back: "P'(x) - 1/x²" },
+                    { front: "Exemple f(x) = x², f'(2) = ?", back: "f'(2) = 4" },
+                    { front: "Tangente à f(x)=x² en x=2", back: "y = 4(x-2) + 4 = 4x - 4" },
+                    { front: "f(x) = |x| dérivable en 0 ?", back: "Non, car taux de variation = ±1 selon côté" },
+                    { front: "Attention théorème variation/dérivée", back: "Valable seulement sur un intervalle, pas sur ℝ* pour 1/x" }
+                ]
+            },
+            {
+                id: 'base-chapitre-4',
+                name: 'Chapitre 4 - Loi binomiale',
+                cards: [
+                    { front: "Épreuve de Bernoulli", back: "Expérience aléatoire à 2 issues : succès ou échec" },
+                    { front: "Loi de Bernoulli paramètres", back: "p = probabilité succès, 1-p = probabilité échec" },
+                    { front: "Schéma de Bernoulli", back: "Répétition de n épreuves de Bernoulli identiques et indépendantes" },
+                    { front: "Coefficient binomial (k parmi n)", back: "Nombre de chemins avec k succès parmi n épreuves, noté (n k)" },
+                    { front: "(n 0)", back: "1" },
+                    { front: "(n 1)", back: "n" },
+                    { front: "(n n)", back: "1" },
+                    { front: "Relation triangle de Pascal", back: "(n k) + (n k+1) = (n+1 k+1)" },
+                    { front: "Loi binomiale notation", back: "B(n, p) où n = nombre d'épreuves, p = probabilité succès" },
+                    { front: "Formule P(X=k) pour B(n,p)", back: "P(X=k) = (n k) × pᵏ × (1-p)ⁿ⁻ᵏ" },
+                    { front: "Espérance E(X) pour B(n,p)", back: "E(X) = n × p" },
+                    { front: "Variance V(X) pour B(n,p)", back: "V(X) = n × p × (1-p)" },
+                    { front: "Écart-type σ(X) pour B(n,p)", back: "σ(X) = √[n × p × (1-p)]" },
+                    { front: "Exemple marche ivrogne", back: "n=20, p=0.5, B(20, 0.5)" },
+                    { front: "Calcul P(X=4) pour l'ivrogne", back: "P(X=4) = (20 4) × 0.5⁴ × 0.5¹⁶ ≈ 0.0046" },
+                    { front: "Valeurs espérance/écart-type ivrogne", back: "E(X)=10, σ(X)≈2.236" },
+                    { front: "Exemple lancer dé répété", back: "Expériences identiques et indépendantes" },
+                    { front: "Exemple tirage avec remise", back: "Urne : 10 tirages avec remise = schéma de Bernoulli" }
+                ]
+            }
+        ];
+    },
+    
+    // Récupérer le deck actuel (base ou normal)
+    getCurrentDeck() {
+        if (!this.currentDeckId) return null;
+        return this.getDeck(this.currentDeckId, this.currentIsBaseDeck);
+    },
+    
+    // ============================================
     // RENDU DES DECKS
     // ============================================
     
@@ -507,6 +832,10 @@ const App = {
         
         container.innerHTML = decks.map(deck => {
             const now = Date.now();
+            // Vérifier que deck.cards existe et est un tableau
+            if (!deck.cards || !Array.isArray(deck.cards)) {
+                deck.cards = [];
+            }
             const cardsDue = deck.cards.filter(card => !card.nextReview || card.nextReview <= now).length;
             const totalCards = deck.cards.length;
             
@@ -519,48 +848,334 @@ const App = {
                     <h3>${this.escapeHtml(deck.name)}</h3>
                     <div class="deck-info">
                         <span>${totalCards} carte${totalCards > 1 ? 's' : ''}</span>
-                        ${cardsDue > 0 ? `<span style="color: var(--primary-color); font-weight: 600;">${cardsDue} à réviser</span>` : ''}
+                        ${cardsDue > 0 ? `<span class="cards-due-badge">${cardsDue} à réviser</span>` : ''}
                     </div>
                 </div>
             `;
         }).join('');
         
-        // Ajouter les event listeners pour les boutons de deck
-        container.querySelectorAll('.deck-action-btn').forEach(btn => {
-            const deckId = btn.getAttribute('data-deck-id');
-            const action = btn.getAttribute('data-action');
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (action === 'delete') {
-                    this.deleteDeck(deckId);
-                } else if (action === 'review') {
-                    this.startReview(deckId);
-                }
-            });
-        });
-        
+        // Ajouter les event listeners pour les decks avec détection d'appui long
         container.querySelectorAll('.deck-card').forEach(card => {
             const deckId = card.dataset.deckId;
-            card.addEventListener('click', (e) => {
-                if (!e.target.closest('.deck-actions')) {
-                    this.openDeck(deckId);
+            if (!deckId) return;
+            
+            // Détection d'appui long (long press)
+            let longPressTimer = null;
+            let hasLongPress = false;
+            let touchStartTime = 0;
+            
+            const handleLongPressStart = (e) => {
+                hasLongPress = false;
+                touchStartTime = Date.now();
+                longPressTimer = setTimeout(() => {
+                    hasLongPress = true;
+                    // Empêcher le clic normal
+                    e.preventDefault();
+                    e.stopPropagation();
+                    // Ouvrir le modal d'actions
+                    this.showDeckActionsModal(deckId, false);
+                }, 500); // 500ms pour déclencher l'appui long
+            };
+            
+            const handleLongPressEnd = (e) => {
+                const touchDuration = Date.now() - touchStartTime;
+                
+                if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
                 }
+                
+                // Si ce n'était pas un appui long (moins de 500ms), ouvrir le deck normalement
+                if (!hasLongPress && touchDuration < 500) {
+                    // Petit délai pour éviter les conflits
+                    setTimeout(() => {
+                        if (!hasLongPress) {
+                            this.openDeck(deckId);
+                        }
+                    }, 100);
+                }
+                
+                hasLongPress = false;
+                touchStartTime = 0;
+            };
+            
+            // Pour les événements tactiles (mobile)
+            card.addEventListener('touchstart', handleLongPressStart, { passive: false });
+            card.addEventListener('touchend', handleLongPressEnd);
+            card.addEventListener('touchcancel', (e) => {
+                if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+                hasLongPress = false;
+                touchStartTime = 0;
+            });
+            
+            // Pour les événements de souris (PC)
+            card.addEventListener('mousedown', handleLongPressStart);
+            card.addEventListener('mouseup', handleLongPressEnd);
+            card.addEventListener('mouseleave', (e) => {
+                if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+                hasLongPress = false;
+                touchStartTime = 0;
+            });
+            
+            // Empêcher le menu contextuel sur appui long
+            card.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
             });
         });
     },
     
-    openDeck(deckId) {
-        this.currentDeckId = deckId;
-        const deck = Storage.getDeck(deckId);
-        if (deck) {
-            document.getElementById('deck-title').textContent = deck.name;
-            this.showDeckDetailView();
+    switchDeckSection(section) {
+        if (!section) {
+            return;
+        }
+        
+        // Mettre à jour les boutons actifs
+        document.querySelectorAll('.deck-section-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        const activeBtn = document.querySelector(`[data-section="${section}"]`);
+        if (activeBtn) {
+            activeBtn.classList.add('active');
+        } else {
+            return;
+        }
+        
+        // Afficher/masquer les conteneurs
+        document.querySelectorAll('.decks-section-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        
+        // Gérer l'affichage des FAB selon la section
+        const addDeckBtn = document.getElementById('add-deck-btn');
+        
+        if (section === 'my-decks') {
+            const myDecksContainer = document.getElementById('my-decks-container');
+            if (myDecksContainer) {
+                myDecksContainer.classList.add('active');
+                this.renderDecks();
+            }
+            // Afficher le bouton d'ajout de deck dans "Mes Decks"
+            if (addDeckBtn) {
+                addDeckBtn.style.display = 'flex';
+            }
+        } else if (section === 'base-decks') {
+            const baseDecksContainer = document.getElementById('base-decks-container');
+            if (baseDecksContainer) {
+                baseDecksContainer.classList.add('active');
+                this.renderBaseDecks();
+            }
+            // Cacher le bouton d'ajout de deck dans "Decks de Base" (lecture seule)
+            if (addDeckBtn) {
+                addDeckBtn.style.display = 'none';
+            }
         }
     },
     
-    startReview(deckId) {
+    renderBaseDecks() {
+        const container = document.getElementById('base-decks-grid');
+        
+        // Récupérer les decks de base (toujours disponibles)
+        const baseDecks = this.getBaseDecksData();
+        
+        // Stocker les decks de base dans une variable accessible
+        this.baseDecks = baseDecks;
+        
+        if (baseDecks.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state" style="grid-column: 1 / -1;">
+                    <div class="empty-state-icon">${Icons.getIcon('books', 64, 'var(--text-secondary)')}</div>
+                    <div class="empty-state-text">Aucun deck de base disponible pour le moment.</div>
+                </div>
+            `;
+            return;
+        }
+        
+        // Afficher les decks de base AVEC boutons d'action (review uniquement, pas de suppression)
+        container.innerHTML = baseDecks.map(deck => {
+            const totalCards = deck.cards.length;
+            const now = Date.now();
+            // Calculer les cartes à réviser pour les decks de base
+            const baseDeckScoresKey = `baseDeckScores_${deck.id}`;
+            const saved = localStorage.getItem(baseDeckScoresKey);
+            let cardsDue = 0;
+            if (saved) {
+                try {
+                    const scores = JSON.parse(saved);
+                    cardsDue = Object.values(scores).filter(score => {
+                        return !score.nextReview || score.nextReview <= now;
+                    }).length;
+                } catch (e) {
+                    console.error('Erreur lors du chargement des scores:', e);
+                }
+            } else {
+                // Si pas de scores sauvegardés, toutes les cartes sont à réviser
+                cardsDue = totalCards;
+            }
+            
+            return `
+                <div class="deck-card" data-deck-id="${deck.id}" data-is-base="true">
+                    <div class="deck-actions">
+                        <button class="deck-action-btn" data-deck-id="${deck.id}" data-action="review" title="Réviser">${Icons.getIcon('refresh', 16, 'currentColor')}</button>
+                    </div>
+                    <h3>${this.escapeHtml(deck.name)}</h3>
+                    <div class="deck-info">
+                        <span>${totalCards} carte${totalCards > 1 ? 's' : ''}</span>
+                        ${cardsDue > 0 ? `<span class="cards-due-badge">${cardsDue} à réviser</span>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        // Ajouter les event listeners pour les decks de base avec détection d'appui long
+        container.querySelectorAll('.deck-card').forEach(card => {
+            const deckId = card.dataset.deckId;
+            if (!deckId) {
+                return;
+            }
+            
+            // Détection d'appui long (long press)
+            let longPressTimer = null;
+            let hasLongPress = false;
+            let touchStartTime = 0;
+            
+            const handleLongPressStart = (e) => {
+                hasLongPress = false;
+                touchStartTime = Date.now();
+                longPressTimer = setTimeout(() => {
+                    hasLongPress = true;
+                    // Empêcher le clic normal
+                    e.preventDefault();
+                    e.stopPropagation();
+                    // Ouvrir le modal d'actions (decks de base = pas de suppression)
+                    this.showDeckActionsModal(deckId, true);
+                }, 500); // 500ms pour déclencher l'appui long
+            };
+            
+            const handleLongPressEnd = (e) => {
+                const touchDuration = Date.now() - touchStartTime;
+                
+                if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+                
+                // Si ce n'était pas un appui long (moins de 500ms), ouvrir le deck normalement
+                if (!hasLongPress && touchDuration < 500) {
+                    // Petit délai pour éviter les conflits
+                    setTimeout(() => {
+                        if (!hasLongPress) {
+                            this.openDeck(deckId, true); // true = isBaseDeck
+                        }
+                    }, 100);
+                }
+                
+                hasLongPress = false;
+                touchStartTime = 0;
+            };
+            
+            // Pour les événements tactiles (mobile)
+            card.addEventListener('touchstart', handleLongPressStart, { passive: false });
+            card.addEventListener('touchend', handleLongPressEnd);
+            card.addEventListener('touchcancel', (e) => {
+                if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+                hasLongPress = false;
+                touchStartTime = 0;
+            });
+            
+            // Pour les événements de souris (PC)
+            card.addEventListener('mousedown', handleLongPressStart);
+            card.addEventListener('mouseup', handleLongPressEnd);
+            card.addEventListener('mouseleave', (e) => {
+                if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+                hasLongPress = false;
+                touchStartTime = 0;
+            });
+            
+            // Empêcher le menu contextuel sur appui long
+            card.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+            });
+        });
+    },
+    
+    openDeck(deckId, isBaseDeck = false) {
+        if (!deckId) {
+            console.error('openDeck appelé sans deckId');
+            return;
+        }
+        
         this.currentDeckId = deckId;
+        
+        // Déterminer si c'est un deck de base
+        if (isBaseDeck === false) {
+            // Vérifier si c'est un deck de base
+            if (this.baseDecks && this.baseDecks.length > 0 && this.baseDecks.find(d => d.id === deckId)) {
+                this.currentIsBaseDeck = true;
+                isBaseDeck = true;
+            } else {
+                this.currentIsBaseDeck = false;
+                isBaseDeck = false;
+            }
+        } else {
+            this.currentIsBaseDeck = isBaseDeck;
+        }
+        
+        // Récupérer le deck (soit depuis Storage, soit depuis les decks de base)
+        const deck = this.getDeck(deckId, isBaseDeck);
+        
+        if (!deck) {
+            alert('Deck non trouvé.');
+            this.showDecksView();
+            return;
+        }
+        
+        const deckTitleEl = document.getElementById('deck-title');
+        if (deckTitleEl) {
+            deckTitleEl.textContent = deck.name;
+        }
+        
+        // Cacher les boutons d'édition/ajout pour les decks de base
+        const addCardBtn = document.getElementById('add-card-btn');
+        if (addCardBtn) {
+            if (this.currentIsBaseDeck) {
+                addCardBtn.style.display = 'none';
+            } else {
+                addCardBtn.style.display = 'flex';
+            }
+        }
+        
+        this.showDeckDetailView(deckId);
+    },
+    
+    startReview(deckId) {
+        if (!deckId) {
+            deckId = this.currentDeckId;
+        }
+        
+        if (!deckId) {
+            alert('Aucun deck sélectionné.');
+            return;
+        }
+        
+        this.currentDeckId = deckId;
+        // Déterminer si c'est un deck de base
+        if (this.baseDecks && this.baseDecks.find(d => d.id === deckId)) {
+            this.currentIsBaseDeck = true;
+        } else {
+            this.currentIsBaseDeck = false;
+        }
         this.showReviewView();
     },
     
@@ -571,16 +1186,16 @@ const App = {
     renderCards() {
         if (!this.currentDeckId) return;
         
-        const deck = Storage.getDeck(this.currentDeckId);
+        const deck = this.getCurrentDeck();
         if (!deck) return;
         
         const container = document.getElementById('cards-container');
         
         if (deck.cards.length === 0) {
             container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">${Icons.getIcon('card', 64, 'var(--text-secondary)')}</div>
-                    <div class="empty-state-text">Aucune carte. Ajoutez-en une pour commencer !</div>
+                <div class="empty-state" style="grid-column: 1 / -1;">
+                    <div class="empty-state-icon">${Icons.getIcon('cards', 64, 'var(--text-secondary)')}</div>
+                    <div class="empty-state-text">Aucune carte dans ce deck.</div>
                 </div>
             `;
             return;
@@ -588,26 +1203,67 @@ const App = {
         
         const now = Date.now();
         
+        // Charger les scores sauvegardés pour les decks de base
+        let savedScores = null;
+        if (this.currentIsBaseDeck) {
+            const baseDeckScoresKey = `baseDeckScores_${this.currentDeckId}`;
+            const saved = localStorage.getItem(baseDeckScoresKey);
+            if (saved) {
+                try {
+                    savedScores = JSON.parse(saved);
+                } catch (e) {
+                    console.error('Erreur lors du chargement des scores:', e);
+                }
+            }
+        }
+        
         container.innerHTML = deck.cards.map((card, index) => {
+            // Charger les scores sauvegardés pour les decks de base, sinon initialiser
+            if (this.currentIsBaseDeck && savedScores && savedScores[index]) {
+                const saved = savedScores[index];
+                card.cardScore = saved.cardScore || 0;
+                card.nextReview = saved.nextReview || null;
+                card.easeFactor = saved.easeFactor || 2.5;
+                card.interval = saved.interval || 0;
+                card.repetitions = saved.repetitions || 0;
+                card.lastReview = saved.lastReview || null;
+            } else {
+                // Initialiser les propriétés de la carte si elles n'existent pas
+                if (card.cardScore === undefined || card.cardScore === null) card.cardScore = 0;
+                if (!card.nextReview) card.nextReview = null;
+                if (!card.easeFactor) card.easeFactor = 2.5;
+                if (!card.interval) card.interval = 0;
+                if (!card.repetitions) card.repetitions = 0;
+                if (!card.lastReview) card.lastReview = null;
+                if (!card.againCount) card.againCount = 0;
+            }
+            
             const cardScore = card.cardScore || 0;
             
             // Couleur selon le score (système de zones)
             const cardColor = ColorZones.getCardColor(cardScore);
             const zoneName = ColorZones.getZoneName(cardScore);
             
+            // Conditionally render action buttons for cards
+            const cardActionButtons = this.currentIsBaseDeck ? '' : `
+                <button class="card-action-btn" data-card-index="${index}" data-action="edit">Modifier</button>
+                <button class="card-action-btn" data-card-index="${index}" data-action="delete" style="color: var(--error);">Supprimer</button>
+            `;
+
             // Construire le contenu de la question
             let frontHtml = '';
             const hasFrontImage = card.frontImage && (typeof card.frontImage === 'string') && card.frontImage.trim() !== '';
             const hasFrontText = card.front && (typeof card.front === 'string') && card.front.trim() !== '';
             
             if (hasFrontImage) {
-                frontHtml += `<div class="card-list-image-container"><img src="${card.frontImage}" alt="Question" class="card-list-image"></div>`;
+                frontHtml += `<div class="card-list-image-container"><img src="${this.escapeHtml(card.frontImage)}" alt="Recto" class="card-list-image"></div>`;
             }
             if (hasFrontText) {
-                frontHtml += `<p class="card-list-text">${this.escapeHtml(card.front)}</p>`;
+                const textClass = hasFrontImage ? 'card-list-text card-list-text-with-image' : 'card-list-text';
+                frontHtml += `<div class="${textClass}">${this.escapeHtml(card.front)}</div>`;
             }
-            if (!frontHtml) {
-                frontHtml = '<p class="card-list-text" style="color: var(--text-secondary);">Aucun contenu pour la question</p>';
+            if (!hasFrontImage && !hasFrontText) {
+                frontHtml += `<div class="card-list-text" style="color: var(--text-secondary); font-style: italic;">Aucun contenu</div>`;
             }
             
             // Construire le contenu de la réponse
@@ -616,84 +1272,541 @@ const App = {
             const hasBackText = card.back && (typeof card.back === 'string') && card.back.trim() !== '';
             
             if (hasBackImage) {
-                backHtml += `<div class="card-list-image-container"><img src="${card.backImage}" alt="Réponse" class="card-list-image"></div>`;
+                backHtml += `<div class="card-list-image-container"><img src="${this.escapeHtml(card.backImage)}" alt="Verso" class="card-list-image"></div>`;
             }
             if (hasBackText) {
-                backHtml += `<p class="card-list-text">${this.escapeHtml(card.back)}</p>`;
+                const textClass = hasBackImage ? 'card-list-text card-list-text-with-image' : 'card-list-text';
+                backHtml += `<div class="${textClass}">${this.escapeHtml(card.back)}</div>`;
             }
-            if (!backHtml) {
-                backHtml = '<p class="card-list-text" style="color: var(--text-secondary);">Aucun contenu pour la réponse</p>';
+            if (!hasBackImage && !hasBackText) {
+                backHtml += `<div class="card-list-text" style="color: var(--text-secondary); font-style: italic;">Aucun contenu</div>`;
             }
-            
+
             return `
                 <div class="card-item">
                     <div class="card-color-band-top" style="background-color: ${cardColor};"></div>
                     <div class="card-item-header">
-                        <strong>Carte ${index + 1}</strong>
-                        <span style="font-size: 11px; color: ${cardColor}; font-weight: 600;">
-                            ${zoneName}
-                        </span>
+                        <div class="card-item-info">
+                            <span class="card-zone-badge" style="background-color: ${cardColor}; color: white; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">
+                                ${zoneName}
+                            </span>
+                        </div>
                     </div>
                     <div class="card-item-review-style">
                         <div class="card-item-side">
-                            <div class="card-item-side-label">Question</div>
-                            <div class="card-item-side-content">${frontHtml}</div>
+                            <div class="card-item-side-label">Recto</div>
+                            <div class="card-item-side-content">
+                                ${frontHtml}
+                            </div>
                         </div>
                         <div class="card-item-side">
-                            <div class="card-item-side-label">Réponse</div>
-                            <div class="card-item-side-content">${backHtml}</div>
+                            <div class="card-item-side-label">Verso</div>
+                            <div class="card-item-side-content">
+                                ${backHtml}
+                            </div>
                         </div>
                     </div>
                     <div class="card-item-actions">
-                        <button class="card-action-btn" data-card-index="${index}" data-action="edit">Modifier</button>
-                        <button class="card-action-btn" data-card-index="${index}" data-action="delete" style="color: var(--error);">Supprimer</button>
+                        ${cardActionButtons}
                     </div>
                 </div>
             `;
         }).join('');
-        
-        // Ajouter les event listeners pour les boutons de carte
-        const cardsContainer = document.getElementById('cards-container');
-        if (cardsContainer) {
-            cardsContainer.querySelectorAll('.card-action-btn').forEach(btn => {
-                const cardIndex = parseInt(btn.getAttribute('data-card-index'));
-                const action = btn.getAttribute('data-action');
-                btn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (action === 'edit') {
-                        this.editCard(cardIndex);
-                    } else if (action === 'delete') {
-                        this.deleteCard(cardIndex);
-                    }
+
+        // Add event listeners for card action buttons only if not a base deck
+        if (!this.currentIsBaseDeck) {
+            const cardsContainer = document.getElementById('cards-container');
+            if (cardsContainer) {
+                cardsContainer.querySelectorAll('.card-action-btn').forEach(btn => {
+                    const cardIndex = parseInt(btn.getAttribute('data-card-index'));
+                    const action = btn.getAttribute('data-action');
+                    btn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (action === 'edit') {
+                            this.editCard(cardIndex);
+                        } else if (action === 'delete') {
+                            this.deleteCard(cardIndex);
+                        }
+                    });
                 });
+            }
+        }
+    },
+    
+    showReviewView() {
+        if (!this.currentDeckId) return;
+        const deck = this.getCurrentDeck();
+        if (!deck) return;
+        
+        // Limiter le nombre de cartes selon la configuration
+        this.reviewCards = SM2.getCardsToReview(deck, this.cardsPerSession);
+        
+        if (this.reviewCards.length === 0) {
+            alert('Aucune carte à réviser pour le moment !');
+            return;
+        }
+        
+        this.currentReviewIndex = 0;
+        this.isRevealed = false;
+        this.showView('review');
+        
+        // Afficher immédiatement la carte sans attendre l'animation
+        if (this.reviewCards && this.reviewCards.length > 0) {
+            this.showReviewCard();
+        }
+    },
+    
+    showReviewCard() {
+        if (this.currentReviewIndex >= this.reviewCards.length) {
+            this.completeReview();
+            return;
+        }
+        
+        const card = this.reviewCards[this.currentReviewIndex];
+        
+        // Construire le HTML pour le recto
+        let frontHtml = '';
+        const hasFrontImage = card.frontImage && (typeof card.frontImage === 'string') && card.frontImage.trim() !== '';
+        const hasFrontText = card.front && (typeof card.front === 'string') && card.front.trim() !== '';
+        
+        if (hasFrontImage) {
+            frontHtml += `<div class="review-image-container"><img src="${this.escapeHtml(card.frontImage)}" alt="Recto" class="review-image"></div>`;
+        }
+        if (hasFrontText) {
+            const textClass = hasFrontImage ? 'review-text review-text-with-image' : 'review-text';
+            frontHtml += `<p class="${textClass}">${this.escapeHtml(card.front)}</p>`;
+        }
+        if (!hasFrontImage && !hasFrontText) {
+            frontHtml += `<p class="review-text" style="color: var(--text-secondary); font-style: italic;">Aucun contenu</p>`;
+        }
+        
+        // Construire le HTML pour le verso
+        let backHtml = '';
+        const hasBackImage = card.backImage && (typeof card.backImage === 'string') && card.backImage.trim() !== '';
+        const hasBackText = card.back && (typeof card.back === 'string') && card.back.trim() !== '';
+        
+        if (hasBackImage) {
+            backHtml += `<div class="review-image-container"><img src="${this.escapeHtml(card.backImage)}" alt="Verso" class="review-image"></div>`;
+        }
+        if (hasBackText) {
+            const textClass = hasBackImage ? 'review-text review-text-with-image' : 'review-text';
+            backHtml += `<p class="${textClass}">${this.escapeHtml(card.back)}</p>`;
+        }
+        if (!hasBackImage && !hasBackText) {
+            backHtml += `<p class="review-text" style="color: var(--text-secondary); font-style: italic;">Aucun contenu</p>`;
+        }
+        
+        // Restaurer la structure HTML si nécessaire
+        const reviewCard = document.getElementById('review-card');
+        const frontElement = document.getElementById('card-front');
+        const backElement = document.getElementById('card-back');
+        
+        // Si les éléments n'existent pas, les recréer
+        if (!frontElement || !backElement) {
+            if (reviewCard) {
+                reviewCard.innerHTML = `
+                    <div id="card-front" class="card-side">
+                    </div>
+                    <div id="card-back" class="card-side hidden">
+                    </div>
+                    <div id="reveal-hint" class="reveal-hint">Tapez pour révéler</div>
+                `;
+                // Réattacher l'event listener après recréation
+                reviewCard.addEventListener('click', () => this.revealAnswer());
+            }
+        }
+        
+        // Mettre à jour le contenu
+        const updatedFrontElement = document.getElementById('card-front');
+        const updatedBackElement = document.getElementById('card-back');
+        
+        if (updatedFrontElement) {
+            updatedFrontElement.innerHTML = frontHtml;
+            // Afficher le recto et réinitialiser les styles
+            updatedFrontElement.classList.remove('hidden');
+            updatedFrontElement.style.display = 'flex';
+            updatedFrontElement.style.opacity = '';
+            updatedFrontElement.style.transform = '';
+            updatedFrontElement.style.transition = '';
+        }
+        
+        if (updatedBackElement) {
+            updatedBackElement.innerHTML = backHtml;
+            // Cacher le verso
+            updatedBackElement.classList.add('hidden');
+            updatedBackElement.style.display = 'none';
+            // Réinitialiser les styles
+            updatedBackElement.style.opacity = '';
+            updatedBackElement.style.transform = '';
+            updatedBackElement.style.transition = '';
+        }
+        
+        const reviewProgress = document.getElementById('review-progress');
+        if (reviewProgress) {
+            reviewProgress.textContent = `${this.currentReviewIndex + 1} / ${this.reviewCards.length}`;
+        }
+        
+        // Réinitialiser l'état
+        this.isRevealed = false;
+        
+        // Cacher les boutons de révision
+        const reviewButtons = document.getElementById('review-buttons');
+        if (reviewButtons) {
+            reviewButtons.classList.add('hidden');
+            reviewButtons.style.pointerEvents = 'none';
+            reviewButtons.style.opacity = '';
+            reviewButtons.style.transform = '';
+            reviewButtons.style.transition = '';
+        }
+        
+        // Réafficher le hint
+        const revealHint = document.getElementById('reveal-hint');
+        if (revealHint) {
+            revealHint.style.display = '';
+            revealHint.style.opacity = '0.7';
+            revealHint.style.transition = 'opacity 0.3s ease';
+        }
+    },
+    
+    revealAnswer() {
+        if (!this.isRevealed) {
+            this.revealCard();
+        }
+    },
+    
+    revealCard() {
+        if (this.isRevealed) return; // Éviter les doubles révélation
+        
+        this.isRevealed = true;
+        const frontElement = document.getElementById('card-front');
+        const backElement = document.getElementById('card-back');
+        const revealHint = document.getElementById('reveal-hint');
+        
+        // Cacher le recto et afficher le verso
+        if (frontElement) {
+            frontElement.classList.add('hidden');
+            frontElement.style.display = 'none';
+        }
+        
+        if (backElement) {
+            backElement.style.display = 'flex';
+            backElement.classList.remove('hidden');
+            // Animation en arrière-plan, mais l'action est déjà faite
+            requestAnimationFrame(() => {
+                backElement.style.opacity = '0';
+                backElement.style.transform = 'scale(0.9)';
+                setTimeout(() => {
+                    backElement.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                    backElement.style.opacity = '1';
+                    backElement.style.transform = 'scale(1)';
+                }, 10);
             });
         }
         
-        // Pas besoin d'appliquer la taille proportionnelle dans la liste
-        // La question et la réponse ont la même taille pour faciliter la lecture
+        // Cacher le hint avec animation en arrière-plan
+        if (revealHint) {
+            revealHint.style.transition = 'opacity 0.3s ease';
+            revealHint.style.opacity = '0';
+            setTimeout(() => {
+                revealHint.style.display = 'none';
+            }, 300);
+        }
+        
+        const reviewButtons = document.getElementById('review-buttons');
+        if (reviewButtons) {
+            // Rendre les boutons cliquables immédiatement
+            reviewButtons.classList.remove('hidden');
+            reviewButtons.style.pointerEvents = 'auto';
+            reviewButtons.style.opacity = '1';
+            reviewButtons.style.transform = 'translateY(0)';
+            
+            // Animation visuelle en arrière-plan (ne bloque pas les clics)
+            // On garde pointer-events: auto même pendant l'animation
+            requestAnimationFrame(() => {
+                // Animation d'entrée depuis le bas
+                reviewButtons.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                reviewButtons.style.opacity = '1';
+                reviewButtons.style.transform = 'translateY(0)';
+            });
+        }
+    },
+    
+    rateCard(quality) {
+        if (!this.isRevealed) {
+            // Si la réponse n'est pas révélée, la révéler d'abord immédiatement
+            this.revealCard();
+            // Ne pas retourner, continuer avec le traitement
+        }
+        
+        // Traitement immédiat, ne pas attendre les animations
+        if (this.currentReviewIndex >= this.reviewCards.length) {
+            this.completeReview();
+            return;
+        }
+        
+        const card = this.reviewCards[this.currentReviewIndex];
+        if (!card) {
+            this.completeReview();
+            return;
+        }
+        
+        // Calculer le nouveau score et les métadonnées
+        SM2.calculateNextReview(card, quality);
+        
+        // Mettre à jour la carte dans le deck original
+        const deck = this.getCurrentDeck();
+        if (deck) {
+            // Trouver la carte correspondante dans le deck original
+            const deckCardIndex = deck.cards.findIndex(c => 
+                c.front === card.front && 
+                c.back === card.back &&
+                (c.frontImage === card.frontImage || (!c.frontImage && !card.frontImage)) &&
+                (c.backImage === card.backImage || (!c.backImage && !card.backImage))
+            );
+            
+            if (deckCardIndex >= 0) {
+                // Mettre à jour toutes les propriétés de la carte dans le deck original
+                const deckCard = deck.cards[deckCardIndex];
+                deckCard.cardScore = card.cardScore;
+                deckCard.nextReview = card.nextReview;
+                deckCard.lastReview = card.lastReview;
+                deckCard.easeFactor = card.easeFactor;
+                deckCard.interval = card.interval;
+                deckCard.repetitions = card.repetitions;
+                deckCard.againCount = card.againCount;
+            }
+            
+            // Sauvegarder les scores pour les decks de base dans localStorage séparément
+            if (this.currentIsBaseDeck) {
+                const baseDeckScoresKey = `baseDeckScores_${this.currentDeckId}`;
+                const scores = {};
+                deck.cards.forEach((c, idx) => {
+                    scores[idx] = {
+                        cardScore: c.cardScore || 0,
+                        nextReview: c.nextReview || null,
+                        easeFactor: c.easeFactor || 2.5,
+                        interval: c.interval || 0,
+                        repetitions: c.repetitions || 0,
+                        lastReview: c.lastReview || null,
+                        againCount: c.againCount || 0
+                    };
+                });
+                localStorage.setItem(baseDeckScoresKey, JSON.stringify(scores));
+            } else {
+                // Sauvegarder le deck normal
+                Storage.saveDeck(deck);
+            }
+        }
+        
+        this.currentReviewIndex++;
+        // Afficher la carte suivante immédiatement, les animations se feront en arrière-plan
+        this.showReviewCard();
+    },
+    
+    completeReview() {
+        // Calculer les statistiques de la session
+        const totalCards = this.reviewCards.length;
+        
+        // Créer un écran de fin de révision similaire à l'affichage des decks de base
+        const reviewCard = document.getElementById('review-card');
+        const reviewButtons = document.getElementById('review-buttons');
+        const reviewProgress = document.getElementById('review-progress');
+        
+        if (reviewCard) {
+            reviewCard.innerHTML = `
+                <div class="card-side" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 400px; padding: 40px;">
+                    <div style="font-size: 64px; margin-bottom: 20px;">🎉</div>
+                    <h2 style="font-size: 28px; color: var(--primary-color); margin-bottom: 15px; text-align: center;">Révision terminée !</h2>
+                    <p style="font-size: 18px; color: var(--text-primary); margin-bottom: 30px; text-align: center;">
+                        Vous avez révisé <strong>${totalCards}</strong> carte${totalCards > 1 ? 's' : ''}.
+                    </p>
+                    <div style="display: flex; flex-direction: row; gap: 15px; width: 100%; max-width: 400px; justify-content: center; align-items: center;">
+                        <button id="review-complete-back-btn" class="review-btn good" style="flex: 1; min-width: 150px; margin: 0;">
+                            Retour au deck
+                        </button>
+                        <button id="review-complete-again-btn" class="review-btn easy" style="flex: 1; min-width: 150px; margin: 0;">
+                            Réviser à nouveau
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            // Ajouter les event listeners pour les boutons
+            const backBtn = document.getElementById('review-complete-back-btn');
+            const againBtn = document.getElementById('review-complete-again-btn');
+            
+            if (backBtn) {
+                backBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    // Retourner au détail du deck si on a un deckId, sinon aux decks
+                    if (this.currentDeckId) {
+                        this.showDeckDetailView();
+                        // Re-rendre les cartes pour afficher les nouvelles couleurs
+                        this.renderCards();
+                    } else {
+                        this.showDecksView();
+                    }
+                });
+            }
+            
+            if (againBtn) {
+                againBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    // Réinitialiser l'état de révision
+                    this.isRevealed = false;
+                    this.currentReviewIndex = 0;
+                    // Relancer la révision (cela va réinitialiser reviewCards et currentReviewIndex)
+                    if (this.currentDeckId) {
+                        this.startReview(this.currentDeckId);
+                    } else {
+                        this.showDecksView();
+                    }
+                });
+            }
+        }
+        
+        if (reviewButtons) {
+            reviewButtons.classList.add('hidden');
+        }
+        
+        if (reviewProgress) {
+            reviewProgress.textContent = 'Terminé';
+        }
     },
     
     // ============================================
-    // MODALS - IDs CORRIGÉS POUR ÉVITER LES CONFLITS
+    // MODALES
     // ============================================
     
-    showModal(title, content) {
+    showModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.classList.add('active');
+        }
+    },
+    
+    showModalWithContent(title, content) {
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modal = modalOverlay.querySelector('.modal');
+        
         document.getElementById('modal-title').textContent = title;
         document.getElementById('modal-content').innerHTML = content;
-        document.getElementById('modal-overlay').classList.remove('hidden');
+        
+        // Afficher immédiatement, animation en arrière-plan
+        modalOverlay.classList.remove('hidden');
+        modalOverlay.style.opacity = '1';
+        if (modal) {
+            modal.style.transform = '';
+            modal.style.opacity = '1';
+        }
+        
+        // Animation en arrière-plan
+        requestAnimationFrame(() => {
+            modalOverlay.style.opacity = '0';
+            if (modal) {
+                modal.style.transform = 'translateY(30px) scale(0.95)';
+                modal.style.opacity = '0';
+            }
+            setTimeout(() => {
+                modalOverlay.style.opacity = '1';
+                if (modal) {
+                    modal.style.transform = 'translateY(0) scale(1)';
+                    modal.style.opacity = '1';
+                }
+            }, 10);
+        });
+    },
+    
+    showDeckActionsModal(deckId, isBaseDeck = false) {
+        const deck = this.getDeck(deckId, isBaseDeck);
+        if (!deck) {
+            return;
+        }
+        
+        let content = `
+            <div style="text-align: center; padding: 10px 0;">
+                <p style="margin-bottom: 20px; font-size: 16px; color: var(--text-primary);">
+                    Que souhaitez-vous faire avec <strong>${this.escapeHtml(deck.name)}</strong> ?
+                </p>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+        `;
+        
+        // Bouton Réviser (toujours disponible)
+        content += `
+                    <button id="deck-action-review" class="btn btn-primary btn-with-icon">
+                        <span class="icon-svg">${Icons.getIcon('refresh', 20, 'white')}</span>
+                        <span>Réviser</span>
+                    </button>
+        `;
+        
+        // Bouton Supprimer (seulement pour les decks non-base)
+        if (!isBaseDeck) {
+            content += `
+                    <button id="deck-action-delete" class="btn btn-danger btn-with-icon">
+                        <span class="icon-svg">${Icons.getIcon('delete', 20, 'white')}</span>
+                        <span>Supprimer</span>
+                    </button>
+            `;
+        }
+        
+        content += `
+                </div>
+            </div>
+        `;
+        
+        this.showModalWithContent('Actions du deck', content);
+        
+        // Event listeners pour les boutons du modal
+        const reviewBtn = document.getElementById('deck-action-review');
+        const deleteBtn = document.getElementById('deck-action-delete');
+        
+        if (reviewBtn) {
+            reviewBtn.addEventListener('click', () => {
+                this.hideModal();
+                this.startReview(deckId);
+            });
+        }
+        
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', () => {
+                this.hideModal();
+                this.deleteDeck(deckId);
+            });
+        }
     },
     
     hideModal() {
-        document.getElementById('modal-overlay').classList.add('hidden');
+        const modalOverlay = document.getElementById('modal-overlay');
+        if (modalOverlay) {
+            // Fermer immédiatement, animation en arrière-plan
+            modalOverlay.classList.add('hidden');
+            const modal = modalOverlay.querySelector('.modal');
+            if (modal) {
+                modal.style.transform = '';
+                modal.style.opacity = '';
+            }
+            // Animation de fermeture en arrière-plan (ne bloque pas)
+            setTimeout(() => {
+                if (modalOverlay.classList.contains('hidden')) {
+                    modalOverlay.style.opacity = '0';
+                    if (modal) {
+                        modal.style.transform = 'translateY(30px) scale(0.95)';
+                        modal.style.opacity = '0';
+                    }
+                }
+            }, 0);
+        }
     },
     
     showAddDeckModal() {
         const content = `
             <form id="add-deck-form">
                 <div class="form-group">
-                    <label for="deck-name">Nom du deck</label>
-                    <input type="text" id="deck-name" required placeholder="Ex: Vocabulaire anglais">
+                    <label for="new-deck-name">Nom du deck</label>
+                    <input type="text" id="new-deck-name" required placeholder="Ex: Vocabulaire anglais">
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="App.hideModal()">Annuler</button>
@@ -702,36 +1815,96 @@ const App = {
             </form>
         `;
         
-        this.showModal('Nouveau deck', content);
+        this.showModalWithContent('Nouveau deck', content);
         
-        setTimeout(() => {
+        // Attacher les event listeners immédiatement
+        requestAnimationFrame(() => {
             const form = document.getElementById('add-deck-form');
-            const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
             if (form) {
-                const handleSubmit = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const name = document.getElementById('deck-name').value.trim();
-                    if (name) {
-                        this.createDeck(name);
-                        this.hideModal();
+                // Retirer les anciens event listeners en clonant
+                const newForm = form.cloneNode(true);
+                form.parentNode.replaceChild(newForm, form);
+                
+                // Réattacher l'event listener
+                const freshForm = document.getElementById('add-deck-form');
+                if (freshForm) {
+                    freshForm.addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this.addDeck();
+                        return false;
+                    });
+                    
+                    // Ajouter aussi un event listener sur le bouton
+                    const submitBtn = freshForm.querySelector('button[type="submit"]');
+                    if (submitBtn) {
+                        submitBtn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            this.addDeck();
+                            return false;
+                        });
                     }
-                };
-                form.addEventListener('submit', handleSubmit);
+                    
+                    // Focus sur le champ de nom
+                    const nameInput = freshForm.querySelector('#new-deck-name');
+                    if (nameInput) {
+                        nameInput.focus();
+                    }
+                }
             }
-        }, 10);
+        }, 50);
+    },
+    
+    addDeck() {
+        const nameInput = document.getElementById('new-deck-name');
+        if (!nameInput) {
+            return;
+        }
+        
+        const name = nameInput.value.trim();
+        if (!name) {
+            alert('Veuillez entrer un nom pour le deck.');
+            return;
+        }
+        
+        const deck = {
+            id: Date.now().toString(),
+            name: name,
+            cards: []
+        };
+        
+        try {
+            Storage.saveDeck(deck);
+            // Fermer la modale immédiatement sans délai
+            this.hideModal();
+            // Rendre les decks après un court délai pour la fluidité
+            requestAnimationFrame(() => {
+                this.renderDecks();
+            });
+        } catch (error) {
+            console.error('Erreur lors de la création du deck:', error);
+            alert('Erreur lors de la création du deck. Veuillez réessayer.');
+        }
     },
     
     showEditDeckModal() {
         if (!this.currentDeckId) return;
-        const deck = Storage.getDeck(this.currentDeckId);
+        
+        // Empêcher l'édition des decks de base
+        if (this.currentIsBaseDeck) {
+            alert('Les decks de base ne peuvent pas être modifiés.');
+            return;
+        }
+        
+        const deck = this.getCurrentDeck();
         if (!deck) return;
         
         const content = `
             <form id="edit-deck-form">
                 <div class="form-group">
                     <label for="edit-deck-name">Nom du deck</label>
-                    <input type="text" id="edit-deck-name" value="${this.escapeHtml(deck.name)}" required>
+                    <input type="text" id="edit-deck-name" required placeholder="Nom du deck" value="${this.escapeHtml(deck.name || '')}">
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="App.hideModal()">Annuler</button>
@@ -740,25 +1913,529 @@ const App = {
             </form>
         `;
         
-        this.showModal('Modifier le deck', content);
+        this.showModalWithContent('Modifier le deck', content);
         
-        setTimeout(() => {
+        requestAnimationFrame(() => {
             const form = document.getElementById('edit-deck-form');
-            const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
             if (form) {
-                const handleSubmit = (e) => {
+                form.addEventListener('submit', (e) => {
                     e.preventDefault();
-                    e.stopPropagation();
-                    const name = document.getElementById('edit-deck-name').value.trim();
-                    if (name) {
-                        this.updateDeck(name);
-                        this.hideModal();
-                    }
-                };
-                form.addEventListener('submit', handleSubmit);
+                    this.editDeck();
+                });
             }
         }, 10);
     },
+    
+    editDeck() {
+        if (!this.currentDeckId) return;
+        
+        // Empêcher l'édition des decks de base
+        if (this.currentIsBaseDeck) {
+            alert('Les decks de base ne peuvent pas être modifiés.');
+            return;
+        }
+        
+        const name = document.getElementById('edit-deck-name').value.trim();
+        if (!name) {
+            alert('Veuillez entrer un nom pour le deck.');
+            return;
+        }
+        
+        const deck = this.getCurrentDeck();
+        if (!deck) return;
+        
+        deck.name = name;
+        Storage.saveDeck(deck);
+        document.getElementById('deck-title').textContent = name;
+        this.renderDecks();
+        this.hideModal();
+    },
+    
+    deleteDeck(id) {
+        if (!id) {
+            id = this.currentDeckId;
+        }
+        
+        // Empêcher la suppression des decks de base
+        if (this.currentIsBaseDeck || (this.baseDecks && this.baseDecks.find(d => d.id === id))) {
+            alert('Les decks de base ne peuvent pas être supprimés.');
+            return;
+        }
+        
+        if (!confirm('Êtes-vous sûr de vouloir supprimer ce deck ?')) {
+            return;
+        }
+        
+        Storage.deleteDeck(id);
+        this.showView('decks');
+        this.renderDecks();
+    },
+    
+    showAddCardModal() {
+        if (this.currentIsBaseDeck) {
+            alert('Les decks de base ne peuvent pas être modifiés.');
+            return;
+        }
+        
+        const content = `
+            <form id="add-card-form">
+                <div class="form-group">
+                    <label for="new-card-front">Recto</label>
+                    <textarea id="new-card-front" placeholder="Question ou texte du recto"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="new-card-front-image">Image du recto (optionnel)</label>
+                    <label for="new-card-front-image" class="btn-import-image" style="cursor: pointer; display: inline-block; color: white;">
+                        Choisir un fichier
+                    </label>
+                    <input type="file" id="new-card-front-image" accept="image/*" style="display: none;">
+                    <div id="preview-front-image" class="image-preview" style="display: none;">
+                        <img id="preview-front-img" class="preview-image" alt="Aperçu recto">
+                        <button type="button" class="btn-remove-preview" onclick="App.removeImagePreview('front')">×</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="new-card-back">Verso</label>
+                    <textarea id="new-card-back" placeholder="Réponse ou texte du verso"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="new-card-back-image">Image du verso (optionnel)</label>
+                    <label for="new-card-back-image" class="btn-import-image" style="cursor: pointer; display: inline-block; color: white;">
+                        Choisir un fichier
+                    </label>
+                    <input type="file" id="new-card-back-image" accept="image/*" style="display: none;">
+                    <div id="preview-back-image" class="image-preview" style="display: none;">
+                        <img id="preview-back-img" class="preview-image" alt="Aperçu verso">
+                        <button type="button" class="btn-remove-preview" onclick="App.removeImagePreview('back')">×</button>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="App.hideModal()">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Créer</button>
+                </div>
+            </form>
+        `;
+        
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modal = modalOverlay.querySelector('.modal');
+        
+        document.getElementById('modal-title').textContent = 'Nouvelle carte';
+        document.getElementById('modal-content').innerHTML = content;
+        
+        // Afficher immédiatement, animation en arrière-plan
+        modalOverlay.classList.remove('hidden');
+        modalOverlay.style.opacity = '1';
+        if (modal) {
+            modal.style.transform = '';
+            modal.style.opacity = '1';
+        }
+        
+        // Animation en arrière-plan
+        requestAnimationFrame(() => {
+            modalOverlay.style.opacity = '0';
+            if (modal) {
+                modal.style.transform = 'translateY(30px) scale(0.95)';
+                modal.style.opacity = '0';
+            }
+            setTimeout(() => {
+                modalOverlay.style.opacity = '1';
+                if (modal) {
+                    modal.style.transform = 'translateY(0) scale(1)';
+                    modal.style.opacity = '1';
+                }
+            }, 10);
+        });
+        
+        // Attacher l'event listener immédiatement (ne pas attendre l'animation)
+        requestAnimationFrame(() => {
+            const form = document.getElementById('add-card-form');
+            if (!form) {
+                console.error('Formulaire add-card-form non trouvé');
+                return;
+            }
+            
+            // Gérer les uploads d'images
+            const frontImageInput = form.querySelector('#new-card-front-image');
+            const backImageInput = form.querySelector('#new-card-back-image');
+            
+            if (frontImageInput) {
+                frontImageInput.addEventListener('change', (e) => {
+                    this.handleImageUpload(e.target.files[0], 'front');
+                });
+            }
+            
+            if (backImageInput) {
+                backImageInput.addEventListener('change', (e) => {
+                    this.handleImageUpload(e.target.files[0], 'back');
+                });
+            }
+            
+            // Fonction de gestion de la soumission
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Récupérer les valeurs depuis le formulaire (pas depuis le document entier)
+                const frontEl = form.querySelector('#new-card-front');
+                const backEl = form.querySelector('#new-card-back');
+                const frontImageBase64 = form.dataset.frontImageBase64 || '';
+                const backImageBase64 = form.dataset.backImageBase64 || '';
+                
+                if (!frontEl || !backEl) {
+                    alert('Erreur: les champs du formulaire n\'ont pas été trouvés.');
+                    return false;
+                }
+                
+                // Récupérer les valeurs depuis les textarea
+                const front = (frontEl.value || '').trim();
+                const back = (backEl.value || '').trim();
+                
+                // Vérifier qu'il y a au moins du texte ou une image de chaque côté
+                const hasFrontContent = front.length > 0 || frontImageBase64.length > 0;
+                const hasBackContent = back.length > 0 || backImageBase64.length > 0;
+                
+                if (!hasFrontContent || !hasBackContent) {
+                    alert('Veuillez remplir au moins un champ (texte ou image) pour chaque côté de la carte.');
+                    return false;
+                }
+                
+                // Appeler addCard avec les valeurs
+                this.addCardWithValues(front, back, frontImageBase64, backImageBase64);
+                return false;
+            };
+            
+            // Utiliser une variable pour éviter les doublons d'event listeners
+            // Si le formulaire a déjà un event listener, on le supprime d'abord
+            const existingHandler = form._submitHandler;
+            if (existingHandler) {
+                form.removeEventListener('submit', existingHandler);
+            }
+            
+            // Stocker la référence du handler pour pouvoir le supprimer plus tard
+            form._submitHandler = handleSubmit;
+            form.addEventListener('submit', handleSubmit);
+            
+            // Ajouter aussi un event listener sur le bouton submit
+            const submitBtn = form.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                const existingClickHandler = submitBtn._clickHandler;
+                if (existingClickHandler) {
+                    submitBtn.removeEventListener('click', existingClickHandler);
+                }
+                submitBtn._clickHandler = handleSubmit;
+                submitBtn.addEventListener('click', handleSubmit);
+            }
+        }, 50);
+    },
+    
+    addCard() {
+        // Cette fonction est conservée pour compatibilité, mais utilise maintenant addCardWithValues
+        const form = document.getElementById('add-card-form');
+        if (!form) {
+            alert('Erreur: formulaire non trouvé.');
+            return;
+        }
+        
+        const frontElement = form.querySelector('#new-card-front');
+        const backElement = form.querySelector('#new-card-back');
+        
+        if (!frontElement || !backElement) {
+            alert('Erreur: les champs du formulaire n\'ont pas été trouvés.');
+            return;
+        }
+        
+        const front = (frontElement.value || '').trim();
+        const back = (backElement.value || '').trim();
+        
+        this.addCardWithValues(front, back);
+    },
+    
+    addCardWithValues(front, back, frontImage = '', backImage = '') {
+        if (this.currentIsBaseDeck) {
+            alert('Les decks de base ne peuvent pas être modifiés.');
+            return;
+        }
+        
+        // Vérifier que les valeurs sont valides
+        const frontTrimmed = (front || '').trim();
+        const backTrimmed = (back || '').trim();
+        const frontImageTrimmed = (frontImage || '').trim();
+        const backImageTrimmed = (backImage || '').trim();
+        
+        // Vérifier qu'il y a au moins du contenu (texte ou image) de chaque côté
+        const hasFrontContent = frontTrimmed.length > 0 || frontImageTrimmed.length > 0;
+        const hasBackContent = backTrimmed.length > 0 || backImageTrimmed.length > 0;
+        
+        if (!hasFrontContent || !hasBackContent) {
+            alert('Veuillez remplir au moins un champ (texte ou image) pour chaque côté de la carte.');
+            return;
+        }
+        
+        const deck = this.getCurrentDeck();
+        if (!deck) {
+            alert('Erreur: deck non trouvé.');
+            return;
+        }
+        
+        const card = {
+            front: frontTrimmed,
+            back: backTrimmed,
+            frontImage: frontImageTrimmed,
+            backImage: backImageTrimmed,
+            cardScore: 0,
+            againCount: 0,
+            nextReview: null,
+            easeFactor: 2.5,
+            interval: 0,
+            repetitions: 0
+        };
+        
+        deck.cards.push(card);
+        Storage.saveDeck(deck);
+        this.renderCards();
+        this.hideModal();
+    },
+    
+    handleImageUpload(file, side) {
+        if (!file) return;
+        
+        // Vérifier le type de fichier
+        if (!file.type.startsWith('image/')) {
+            alert('Veuillez sélectionner un fichier image valide.');
+            return;
+        }
+        
+        // Vérifier la taille (max 5MB)
+        const maxSize = 5 * 1024 * 1024; // 5MB
+        if (file.size > maxSize) {
+            alert('L\'image est trop grande. Veuillez sélectionner une image de moins de 5MB.');
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const base64 = e.target.result;
+            const previewId = side === 'front' ? 'preview-front-img' : 'preview-back-img';
+            const previewContainerId = side === 'front' ? 'preview-front-image' : 'preview-back-image';
+            const inputId = side === 'front' ? 'new-card-front-image' : 'new-card-back-image';
+            const form = document.getElementById('add-card-form') || document.getElementById('edit-card-form');
+            
+            // Afficher la prévisualisation
+            const previewImg = document.getElementById(previewId);
+            const previewContainer = document.getElementById(previewContainerId);
+            
+            if (previewImg && previewContainer) {
+                previewImg.src = base64;
+                previewContainer.style.display = 'block';
+            }
+            
+            // Stocker la base64 dans le formulaire
+            if (form) {
+                if (side === 'front') {
+                    form.dataset.frontImageBase64 = base64;
+                } else {
+                    form.dataset.backImageBase64 = base64;
+                }
+            }
+        };
+        
+        reader.onerror = () => {
+            alert('Erreur lors de la lecture de l\'image.');
+        };
+        
+        reader.readAsDataURL(file);
+    },
+    
+    removeImagePreview(side) {
+        const previewContainerId = side === 'front' ? 'preview-front-image' : 'preview-back-image';
+        const inputId = side === 'front' ? 'new-card-front-image' : 'new-card-back-image';
+        const editInputId = side === 'front' ? 'edit-card-front-image' : 'edit-card-back-image';
+        const form = document.getElementById('add-card-form') || document.getElementById('edit-card-form');
+        
+        // Masquer la prévisualisation
+        const previewContainer = document.getElementById(previewContainerId);
+        if (previewContainer) {
+            previewContainer.style.display = 'none';
+        }
+        
+        // Réinitialiser l'input
+        const input = document.getElementById(inputId) || document.getElementById(editInputId);
+        if (input) {
+            input.value = '';
+        }
+        
+        // Supprimer la base64 du formulaire
+        if (form) {
+            if (side === 'front') {
+                form.dataset.frontImageBase64 = '';
+            } else {
+                form.dataset.backImageBase64 = '';
+            }
+        }
+    },
+    
+    showEditCardModal(cardIndex) {
+        if (this.currentIsBaseDeck) {
+            alert('Les decks de base ne peuvent pas être modifiés.');
+            return;
+        }
+        
+        const deck = this.getCurrentDeck();
+        if (!deck || !deck.cards[cardIndex]) return;
+        
+        const card = deck.cards[cardIndex];
+        const hasFrontImage = card.frontImage && card.frontImage.trim() !== '';
+        const hasBackImage = card.backImage && card.backImage.trim() !== '';
+        
+        const content = `
+            <form id="edit-card-form">
+                <input type="hidden" id="edit-card-index" value="${cardIndex}">
+                <div class="form-group">
+                    <label for="edit-card-front">Recto</label>
+                    <textarea id="edit-card-front" placeholder="Question ou texte du recto">${this.escapeHtml(card.front || '')}</textarea>
+                </div>
+                <div class="form-group">
+                    <label for="edit-card-front-image">Image du recto (optionnel)</label>
+                    <label for="edit-card-front-image" class="btn-import-image" style="cursor: pointer; display: inline-block; color: white;">
+                        Choisir un fichier
+                    </label>
+                    <input type="file" id="edit-card-front-image" accept="image/*" style="display: none;">
+                    <div id="preview-front-image" class="image-preview" style="display: ${hasFrontImage ? 'block' : 'none'};">
+                        <img id="preview-front-img" class="preview-image" src="${hasFrontImage ? this.escapeHtml(card.frontImage) : ''}" alt="Aperçu recto">
+                        <button type="button" class="btn-remove-preview" onclick="App.removeImagePreview('front')">×</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="edit-card-back">Verso</label>
+                    <textarea id="edit-card-back" placeholder="Réponse ou texte du verso">${this.escapeHtml(card.back || '')}</textarea>
+                </div>
+                <div class="form-group">
+                    <label for="edit-card-back-image">Image du verso (optionnel)</label>
+                    <label for="edit-card-back-image" class="btn-import-image" style="cursor: pointer; display: inline-block; color: white;">
+                        Choisir un fichier
+                    </label>
+                    <input type="file" id="edit-card-back-image" accept="image/*" style="display: none;">
+                    <div id="preview-back-image" class="image-preview" style="display: ${hasBackImage ? 'block' : 'none'};">
+                        <img id="preview-back-img" class="preview-image" src="${hasBackImage ? this.escapeHtml(card.backImage) : ''}" alt="Aperçu verso">
+                        <button type="button" class="btn-remove-preview" onclick="App.removeImagePreview('back')">×</button>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="App.hideModal()">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Enregistrer</button>
+                </div>
+            </form>
+        `;
+        
+        this.showModalWithContent('Modifier la carte', content);
+        
+        requestAnimationFrame(() => {
+            const form = document.getElementById('edit-card-form');
+            if (form) {
+                // Initialiser les images existantes dans le formulaire
+                if (hasFrontImage) {
+                    form.dataset.frontImageBase64 = card.frontImage;
+                }
+                if (hasBackImage) {
+                    form.dataset.backImageBase64 = card.backImage;
+                }
+                
+                // Gérer les uploads d'images
+                const frontImageInput = form.querySelector('#edit-card-front-image');
+                const backImageInput = form.querySelector('#edit-card-back-image');
+                
+                if (frontImageInput) {
+                    frontImageInput.addEventListener('change', (e) => {
+                        this.handleImageUpload(e.target.files[0], 'front');
+                    });
+                }
+                
+                if (backImageInput) {
+                    backImageInput.addEventListener('change', (e) => {
+                        this.handleImageUpload(e.target.files[0], 'back');
+                    });
+                }
+                
+                form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.editCard(cardIndex);
+                });
+            }
+        }, 10);
+    },
+    
+    editCard(cardIndex) {
+        if (this.currentIsBaseDeck) {
+            alert('Les decks de base ne peuvent pas être modifiés.');
+            return;
+        }
+        
+        // Utiliser le paramètre cardIndex ou le récupérer du DOM
+        const index = cardIndex !== undefined ? cardIndex : parseInt(document.getElementById('edit-card-index')?.value || '0', 10);
+        const form = document.getElementById('edit-card-form');
+        const frontEl = document.getElementById('edit-card-front');
+        const backEl = document.getElementById('edit-card-back');
+        
+        if (!frontEl || !backEl) {
+            alert('Erreur: les champs du formulaire n\'ont pas été trouvés.');
+            return;
+        }
+        
+        const front = (frontEl.value || '').trim();
+        const back = (backEl.value || '').trim();
+        const frontImageBase64 = form ? (form.dataset.frontImageBase64 || '') : '';
+        const backImageBase64 = form ? (form.dataset.backImageBase64 || '') : '';
+        
+        // Vérifier qu'il y a au moins du contenu (texte ou image) de chaque côté
+        const hasFrontContent = front.length > 0 || frontImageBase64.length > 0;
+        const hasBackContent = back.length > 0 || backImageBase64.length > 0;
+        
+        if (!hasFrontContent || !hasBackContent) {
+            alert('Veuillez remplir au moins un champ (texte ou image) pour chaque côté de la carte.');
+            return;
+        }
+        
+        const deck = this.getCurrentDeck();
+        if (!deck || !deck.cards || !deck.cards[index]) {
+            alert('Erreur: carte non trouvée.');
+            return;
+        }
+        
+        deck.cards[index].front = front;
+        deck.cards[index].back = back;
+        deck.cards[index].frontImage = frontImageBase64;
+        deck.cards[index].backImage = backImageBase64;
+        Storage.saveDeck(deck);
+        this.renderCards();
+        this.hideModal();
+    },
+    
+    deleteCard(index) {
+        if (this.currentIsBaseDeck) {
+            alert('Les decks de base ne peuvent pas être modifiés.');
+            return;
+        }
+        
+        if (!confirm('Êtes-vous sûr de vouloir supprimer cette carte ?')) {
+            return;
+        }
+        
+        const deck = this.getCurrentDeck();
+        if (!deck) return;
+        
+        deck.cards.splice(index, 1);
+        Storage.saveDeck(deck);
+        this.renderCards();
+    },
+    
+    // ============================================
+    // NAVIGATION (fonction déjà définie plus haut, supprimée ici pour éviter duplication)
+    // ============================================
+    
+    
+    // ============================================
+    // MODALES SUPPLÉMENTAIRES
+    // ============================================
     
     showReviewSettingsModal() {
         const content = `
@@ -777,820 +2454,123 @@ const App = {
             </form>
         `;
         
-        this.showModal('Paramètres de révision', content);
+        this.showModalWithContent('Paramètres de révision', content);
         
-        setTimeout(() => {
+        requestAnimationFrame(() => {
             const form = document.getElementById('review-settings-form');
-            const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
             if (form) {
-                const handleSubmit = (e) => {
+                form.addEventListener('submit', (e) => {
                     e.preventDefault();
-                    e.stopPropagation();
                     const cardsPerSession = parseInt(document.getElementById('cards-per-session').value);
                     if (cardsPerSession > 0 && cardsPerSession <= 100) {
                         this.cardsPerSession = cardsPerSession;
-                        // Sauvegarder dans localStorage
                         localStorage.setItem('flashcards_cardsPerSession', cardsPerSession.toString());
                         this.hideModal();
                         alert(`Configuration enregistrée : ${cardsPerSession} cartes par session`);
                     } else {
                         alert('Veuillez entrer un nombre entre 1 et 100');
                     }
-                };
-                form.addEventListener('submit', handleSubmit);
+                });
             }
         }, 10);
     },
     
     showStatsModal() {
         if (!this.currentDeckId) return;
-        const deck = Storage.getDeck(this.currentDeckId);
+        const deck = this.getCurrentDeck();
         if (!deck) return;
         
         const now = Date.now();
-        const cardsWithStats = deck.cards.map((card, index) => {
-            const againCount = card.againCount || 0;
-            const cardScore = card.cardScore || 0;
-            const isDue = !card.nextReview || card.nextReview <= now;
-            const daysSinceLastReview = card.lastReview 
-                ? Math.floor((now - card.lastReview) / (24 * 60 * 60 * 1000))
-                : 999;
-            
-            return {
-                index: index,
-                card: card,
-                againCount: againCount,
-                cardScore: cardScore,
-                isDue: isDue,
-                daysSinceLastReview: daysSinceLastReview,
-                nextReview: card.nextReview ? new Date(card.nextReview).toLocaleDateString('fr-FR') : 'Jamais'
-            };
-        });
-        
-        // Trier par score (croissant = les plus difficiles en premier)
-        cardsWithStats.sort((a, b) => {
-            if (a.cardScore !== b.cardScore) {
-                return a.cardScore - b.cardScore; // Tri croissant
-            }
-            if (a.isDue !== b.isDue) {
-                return a.isDue ? -1 : 1;
-            }
-            if (b.againCount !== a.againCount) {
-                return b.againCount - a.againCount;
-            }
-            return (a.card.nextReview || 0) - (b.card.nextReview || 0);
-        });
-        
         const totalCards = deck.cards.length;
-        const totalAgainClicks = deck.cards.reduce((sum, card) => sum + (card.againCount || 0), 0);
-        const totalCardScore = deck.cards.reduce((sum, card) => sum + (card.cardScore || 0), 0);
-        const cardsDue = deck.cards.filter(card => !card.nextReview || card.nextReview <= now).length;
-        const avgAgainCount = totalCards > 0 ? (totalAgainClicks / totalCards).toFixed(1) : 0;
-        const avgCardScore = totalCards > 0 ? (totalCardScore / totalCards).toFixed(1) : 0;
+        let cardsDue = 0;
+        let cardsEasy = 0;
+        let cardsMedium = 0;
+        let cardsHard = 0;
+        let cardsVeryHard = 0;
         
-        const statsHtml = `
-            <div style="margin-bottom: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px;">
-                <h3 style="margin-top: 0; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
-                    <span class="icon-svg">${Icons.getIcon('chart', 20, 'var(--primary-color)')}</span>
-                    Statistiques du deck
-                </h3>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; font-size: 14px;">
-                    <div><strong>Total cartes:</strong> ${totalCards}</div>
-                    <div><strong>Cartes à réviser:</strong> ${cardsDue}</div>
-                    <div><strong>Total clics "Encore":</strong> ${totalAgainClicks}</div>
-                    <div><strong>Score total:</strong> <span style="color: #2196F3;">${totalCardScore}</span></div>
-                    <div><strong>Moyenne "Encore":</strong> ${avgAgainCount} par carte</div>
-                    <div><strong>Score moyen:</strong> ${avgCardScore}</div>
-                </div>
-            </div>
-            <div style="max-height: 400px; overflow-y: auto;">
-                <h4 style="margin-top: 0;">Classement par difficulté (les plus difficiles en premier)</h4>
-                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                    <thead>
-                        <tr style="background: var(--bg-secondary); position: sticky; top: 0;">
-                            <th style="padding: 8px; text-align: left; border-bottom: 2px solid var(--border-color);">#</th>
-                            <th style="padding: 8px; text-align: left; border-bottom: 2px solid var(--border-color);">Carte</th>
-                            <th style="padding: 8px; text-align: center; border-bottom: 2px solid var(--border-color);">Encore</th>
-                            <th style="padding: 8px; text-align: center; border-bottom: 2px solid var(--border-color);">
-                                <span class="icon-svg" style="display: inline-block; vertical-align: middle;">${Icons.getIcon('chart', 14, 'currentColor')}</span> Score
-                            </th>
-                            <th style="padding: 8px; text-align: center; border-bottom: 2px solid var(--border-color);">📅 Prochaine</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${cardsWithStats.map((stat, idx) => {
-                            const cardColor = ColorZones.getCardColor(stat.cardScore);
-                            
-                            return `
-                                <tr style="border-bottom: 1px solid var(--border-color);">
-                                    <td style="padding: 8px; font-weight: 600; color: ${cardColor};">${idx + 1}</td>
-                                    <td style="padding: 8px;">
-                                        <strong>Carte ${stat.index + 1}</strong><br>
-                                        <small style="color: var(--text-secondary);">${this.escapeHtml(stat.card.front.substring(0, 40))}${stat.card.front.length > 40 ? '...' : ''}</small>
-                                    </td>
-                                    <td style="padding: 8px; text-align: center; color: ${cardColor}; font-weight: 600;">${stat.againCount}</td>
-                                    <td style="padding: 8px; text-align: center; font-weight: 600; color: ${cardColor};">${stat.cardScore}</td>
-                                    <td style="padding: 8px; text-align: center; font-size: 11px;">${stat.nextReview}</td>
-                                </tr>
-                            `;
-                        }).join('')}
-                    </tbody>
-                </table>
-            </div>
-        `;
-        
-        this.showModal('Statistiques du deck', statsHtml);
-    },
-    
-    showAddCardModal() {
-        if (!this.currentDeckId) {
-            alert('Veuillez d\'abord ouvrir un deck');
-            return;
-        }
-        
-        // IDs MODIFIÉS: input-card-front et input-card-back pour éviter conflit
-        const content = `
-            <form id="add-card-form">
-                <div class="form-group">
-                    <label for="input-card-front">Question</label>
-                    <textarea id="input-card-front" placeholder="Texte de la question"></textarea>
-                </div>
-                <div class="form-group">
-                    <input type="file" id="input-card-front-image" accept="image/*" style="display: none;">
-                    <button type="button" class="btn btn-primary btn-import-image" id="btn-import-front-image">
-                        Importer une image pour la question
-                    </button>
-                    <div id="front-image-preview" class="image-preview"></div>
-                </div>
-                <div class="form-group">
-                    <label for="input-card-back">Réponse</label>
-                    <textarea id="input-card-back" placeholder="Texte de la réponse"></textarea>
-                </div>
-                <div class="form-group">
-                    <input type="file" id="input-card-back-image" accept="image/*" style="display: none;">
-                    <button type="button" class="btn btn-primary btn-import-image" id="btn-import-back-image">
-                        Importer une image pour la réponse
-                    </button>
-                    <div id="back-image-preview" class="image-preview"></div>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="App.hideModal()">Annuler</button>
-                    <button type="submit" class="btn btn-primary">Ajouter</button>
-                </div>
-            </form>
-        `;
-        
-        this.showModal('Nouvelle carte', content);
-        
-        setTimeout(() => {
-            const form = document.getElementById('add-card-form');
-            const frontImageInput = document.getElementById('input-card-front-image');
-            const backImageInput = document.getElementById('input-card-back-image');
-            const frontImagePreview = document.getElementById('front-image-preview');
-            const backImagePreview = document.getElementById('back-image-preview');
-            const btnImportFront = document.getElementById('btn-import-front-image');
-            const btnImportBack = document.getElementById('btn-import-back-image');
-            
-            const imageData = { front: null, back: null };
-            
-            // Gestion de l'upload d'image pour la question
-            if (btnImportFront && frontImageInput) {
-                const handleImportFront = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    frontImageInput.click();
-                };
-                btnImportFront.addEventListener('click', handleImportFront);
-                btnImportFront.addEventListener('touchend', handleImportFront);
-                
-                frontImageInput.addEventListener('change', async (e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                        try {
-                            const base64 = await this.imageToBase64(file);
-                            imageData.front = base64;
-                            if (frontImagePreview) {
-                                frontImagePreview.innerHTML = `<img src="${base64}" alt="Aperçu" class="preview-image"><button type="button" class="btn-remove-preview" id="btn-remove-front-new">×</button>`;
-                                const newBtn = document.getElementById('btn-remove-front-new');
-                                if (newBtn) {
-                                    const handleRemove = (e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        imageData.front = null;
-                                        if (frontImageInput) frontImageInput.value = '';
-                                        if (frontImagePreview) frontImagePreview.innerHTML = '';
-                                    };
-                                    newBtn.addEventListener('click', handleRemove);
-                                    newBtn.addEventListener('touchend', handleRemove);
-                                }
-                            }
-                        } catch (error) {
-                            alert('Erreur lors du chargement de l\'image : ' + error.message);
-                        }
-                    }
-                });
+        deck.cards.forEach(card => {
+            const cardScore = card.cardScore || 0;
+            if (!card.nextReview || card.nextReview <= now) {
+                cardsDue++;
             }
             
-            // Gestion de l'upload d'image pour la réponse
-            if (btnImportBack && backImageInput) {
-                const handleImportBack = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    backImageInput.click();
-                };
-                btnImportBack.addEventListener('click', handleImportBack);
-                btnImportBack.addEventListener('touchend', handleImportBack);
-                
-                backImageInput.addEventListener('change', async (e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                        try {
-                            const base64 = await this.imageToBase64(file);
-                            imageData.back = base64;
-                            if (backImagePreview) {
-                                backImagePreview.innerHTML = `<img src="${base64}" alt="Aperçu" class="preview-image"><button type="button" class="btn-remove-preview" id="btn-remove-back-new">×</button>`;
-                                const newBtn = document.getElementById('btn-remove-back-new');
-                                if (newBtn) {
-                                    const handleRemove = (e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        imageData.back = null;
-                                        if (backImageInput) backImageInput.value = '';
-                                        if (backImagePreview) backImagePreview.innerHTML = '';
-                                    };
-                                    newBtn.addEventListener('click', handleRemove);
-                                    newBtn.addEventListener('touchend', handleRemove);
-                                }
-                            }
-                        } catch (error) {
-                            alert('Erreur lors du chargement de l\'image : ' + error.message);
-                        }
-                    }
-                });
-            }
-            
-            if (form) {
-                const submitBtn = form.querySelector('button[type="submit"]');
-                const handleSubmit = async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const front = document.getElementById('input-card-front').value.trim();
-                    const back = document.getElementById('input-card-back').value.trim();
-                    
-                    // Vérifier qu'au moins un champ (texte ou image) est rempli pour chaque côté
-                    if (!front && !imageData.front && !back && !imageData.back) {
-                        alert('Veuillez remplir au moins un champ (texte ou image) pour la question et la réponse');
-                        return;
-                    }
-                    
-                    if (!front && !imageData.front) {
-                        alert('Veuillez ajouter du texte ou une image pour la question');
-                        return;
-                    }
-                    
-                    if (!back && !imageData.back) {
-                        alert('Veuillez ajouter du texte ou une image pour la réponse');
-                        return;
-                    }
-                    
-                    await this.createCard(front, back, imageData.front, imageData.back);
-                    this.hideModal();
-                };
-                form.addEventListener('submit', handleSubmit);
-            }
-        }, 10);
-    },
-    
-    showEditCardModal(cardIndex) {
-        if (!this.currentDeckId) return;
-        const deck = Storage.getDeck(this.currentDeckId);
-        if (!deck || !deck.cards[cardIndex]) return;
-        
-        const card = deck.cards[cardIndex];
-        const frontImage = card.frontImage || '';
-        const backImage = card.backImage || '';
-        
-        // IDs MODIFIÉS: input-edit-card-front et input-edit-card-back
-        const content = `
-            <form id="edit-card-form">
-                <div class="form-group">
-                    <label for="input-edit-card-front">Question</label>
-                    <textarea id="input-edit-card-front" placeholder="Texte de la question">${this.escapeHtml(card.front || '')}</textarea>
-                </div>
-                <div class="form-group">
-                    <input type="file" id="input-edit-card-front-image" accept="image/*" style="display: none;">
-                    <button type="button" class="btn btn-primary btn-import-image" id="btn-edit-import-front-image">
-                        Importer une image pour la question
-                    </button>
-                    <div id="edit-front-image-preview" class="image-preview">${frontImage ? `<img src="${frontImage}" alt="Aperçu" class="preview-image"><button type="button" class="btn-remove-preview" id="btn-remove-edit-front">×</button>` : ''}</div>
-                </div>
-                <div class="form-group">
-                    <label for="input-edit-card-back">Réponse</label>
-                    <textarea id="input-edit-card-back" placeholder="Texte de la réponse">${this.escapeHtml(card.back || '')}</textarea>
-                </div>
-                <div class="form-group">
-                    <input type="file" id="input-edit-card-back-image" accept="image/*" style="display: none;">
-                    <button type="button" class="btn btn-primary btn-import-image" id="btn-edit-import-back-image">
-                        Importer une image pour la réponse
-                    </button>
-                    <div id="edit-back-image-preview" class="image-preview">${backImage ? `<img src="${backImage}" alt="Aperçu" class="preview-image"><button type="button" class="btn-remove-preview" id="btn-remove-edit-back">×</button>` : ''}</div>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="App.hideModal()">Annuler</button>
-                    <button type="submit" class="btn btn-primary">Enregistrer</button>
-                </div>
-            </form>
-        `;
-        
-        this.showModal('Modifier la carte', content);
-        
-        setTimeout(() => {
-            const form = document.getElementById('edit-card-form');
-            const frontImageInput = document.getElementById('input-edit-card-front-image');
-            const backImageInput = document.getElementById('input-edit-card-back-image');
-            const frontImagePreview = document.getElementById('edit-front-image-preview');
-            const backImagePreview = document.getElementById('edit-back-image-preview');
-            const btnImportFront = document.getElementById('btn-edit-import-front-image');
-            const btnImportBack = document.getElementById('btn-edit-import-back-image');
-            
-            const editImageData = { front: frontImage || null, back: backImage || null };
-            
-            // Gestion de la suppression d'image
-            const btnRemoveFront = document.getElementById('btn-remove-edit-front');
-            const btnRemoveBack = document.getElementById('btn-remove-edit-back');
-            
-            if (btnRemoveFront) {
-                const handleRemoveFront = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    editImageData.front = null;
-                    if (frontImageInput) frontImageInput.value = '';
-                    if (frontImagePreview) frontImagePreview.innerHTML = '';
-                };
-                btnRemoveFront.addEventListener('click', handleRemoveFront);
-                btnRemoveFront.addEventListener('touchend', handleRemoveFront);
-            }
-            
-            if (btnRemoveBack) {
-                const handleRemoveBack = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    editImageData.back = null;
-                    if (backImageInput) backImageInput.value = '';
-                    if (backImagePreview) backImagePreview.innerHTML = '';
-                };
-                btnRemoveBack.addEventListener('click', handleRemoveBack);
-                btnRemoveBack.addEventListener('touchend', handleRemoveBack);
-            }
-            
-            // Gestion de l'upload d'image pour la question
-            if (btnImportFront && frontImageInput) {
-                const handleImportFrontEdit = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    frontImageInput.click();
-                };
-                btnImportFront.addEventListener('click', handleImportFrontEdit);
-                btnImportFront.addEventListener('touchend', handleImportFrontEdit);
-                
-                frontImageInput.addEventListener('change', async (e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                        try {
-                            const base64 = await this.imageToBase64(file);
-                            editImageData.front = base64;
-                            if (frontImagePreview) {
-                                frontImagePreview.innerHTML = `<img src="${base64}" alt="Aperçu" class="preview-image"><button type="button" class="btn-remove-preview" id="btn-remove-edit-front-new">×</button>`;
-                                const newBtn = document.getElementById('btn-remove-edit-front-new');
-                                if (newBtn) {
-                                    newBtn.addEventListener('click', () => {
-                                        editImageData.front = null;
-                                        if (frontImageInput) frontImageInput.value = '';
-                                        if (frontImagePreview) frontImagePreview.innerHTML = '';
-                                    });
-                                }
-                            }
-                        } catch (error) {
-                            alert('Erreur lors du chargement de l\'image : ' + error.message);
-                        }
-                    }
-                });
-            }
-            
-            // Gestion de l'upload d'image pour la réponse
-            if (btnImportBack && backImageInput) {
-                const handleImportBackEdit = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    backImageInput.click();
-                };
-                btnImportBack.addEventListener('click', handleImportBackEdit);
-                btnImportBack.addEventListener('touchend', handleImportBackEdit);
-                
-                backImageInput.addEventListener('change', async (e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                        try {
-                            const base64 = await this.imageToBase64(file);
-                            editImageData.back = base64;
-                            if (backImagePreview) {
-                                backImagePreview.innerHTML = `<img src="${base64}" alt="Aperçu" class="preview-image"><button type="button" class="btn-remove-preview" id="btn-remove-edit-back-new">×</button>`;
-                                const newBtn = document.getElementById('btn-remove-edit-back-new');
-                                if (newBtn) {
-                                    const handleRemove = (e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        editImageData.back = null;
-                                        if (backImageInput) backImageInput.value = '';
-                                        if (backImagePreview) backImagePreview.innerHTML = '';
-                                    };
-                                    newBtn.addEventListener('click', handleRemove);
-                                    newBtn.addEventListener('touchend', handleRemove);
-                                }
-                            }
-                        } catch (error) {
-                            alert('Erreur lors du chargement de l\'image : ' + error.message);
-                        }
-                    }
-                });
-            }
-            
-            if (form) {
-                const submitBtn = form.querySelector('button[type="submit"]');
-                const handleSubmit = async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const front = document.getElementById('input-edit-card-front').value.trim();
-                    const back = document.getElementById('input-edit-card-back').value.trim();
-                    
-                    // Vérifier qu'au moins un champ (texte ou image) est rempli pour chaque côté
-                    if (!front && !editImageData.front && !back && !editImageData.back) {
-                        alert('Veuillez remplir au moins un champ (texte ou image) pour la question et la réponse');
-                        return;
-                    }
-                    
-                    if (!front && !editImageData.front) {
-                        alert('Veuillez ajouter du texte ou une image pour la question');
-                        return;
-                    }
-                    
-                    if (!back && !editImageData.back) {
-                        alert('Veuillez ajouter du texte ou une image pour la réponse');
-                        return;
-                    }
-                    
-                    await this.updateCard(cardIndex, front, back, editImageData.front, editImageData.back);
-                    this.hideModal();
-                };
-                form.addEventListener('submit', handleSubmit);
-            }
-        }, 10);
-    },
-    
-    // ============================================
-    // GESTION DES DECKS
-    // ============================================
-    
-    createDeck(name) {
-        const deck = {
-            id: Date.now().toString(),
-            name: name,
-            cards: [],
-            createdAt: Date.now()
-        };
-        
-        Storage.saveDeck(deck);
-        this.renderDecks();
-    },
-    
-    updateDeck(name) {
-        if (!this.currentDeckId) return;
-        const deck = Storage.getDeck(this.currentDeckId);
-        if (deck) {
-            deck.name = name;
-            Storage.saveDeck(deck);
-            document.getElementById('deck-title').textContent = name;
-            this.renderDecks();
-        }
-    },
-    
-    deleteDeck(id) {
-        if (confirm('Êtes-vous sûr de vouloir supprimer ce deck ?')) {
-            Storage.deleteDeck(id);
-            if (this.currentDeckId === id) {
-                this.showDecksView();
+            if (cardScore < 10) {
+                cardsVeryHard++;
+            } else if (cardScore < 20) {
+                cardsHard++;
+            } else if (cardScore < 30) {
+                cardsMedium++;
             } else {
-                this.renderDecks();
+                cardsEasy++;
             }
-        }
-    },
-    
-    // ============================================
-    // GESTION DES CARTES
-    // ============================================
-    
-    createCard(front, back, frontImage = null, backImage = null) {
-        if (!this.currentDeckId) {
-            console.error('Aucun deck sélectionné');
-            return;
-        }
+        });
         
-        const deck = Storage.getDeck(this.currentDeckId);
-        if (!deck) {
-            console.error('Deck non trouvé');
-            return;
-        }
-        
-        const card = {
-            front: front || '',
-            back: back || '',
-            frontImage: frontImage || null,
-            backImage: backImage || null,
-            easeFactor: 2.5,
-            interval: 1,
-            repetitions: 0,
-            againCount: 0,
-            cardScore: 0,
-            nextReview: null,
-            lastReview: null
-        };
-        
-        deck.cards.push(card);
-        Storage.saveDeck(deck);
-        this.renderCards();
-        this.renderDecks();
-    },
-    
-    removeImagePreview(side, imageData) {
-        if (side === 'front') {
-            const input = document.getElementById('input-card-front-image');
-            const preview = document.getElementById('front-image-preview');
-            if (input) input.value = '';
-            if (preview) preview.innerHTML = '';
-            if (imageData) imageData.front = null;
-        } else if (side === 'back') {
-            const input = document.getElementById('input-card-back-image');
-            const preview = document.getElementById('back-image-preview');
-            if (input) input.value = '';
-            if (preview) preview.innerHTML = '';
-            if (imageData) imageData.back = null;
-        }
-    },
-    
-    editCard(index) {
-        this.showEditCardModal(index);
-    },
-    
-    updateCard(index, front, back, frontImage = null, backImage = null) {
-        if (!this.currentDeckId) return;
-        const deck = Storage.getDeck(this.currentDeckId);
-        if (deck && deck.cards[index]) {
-            deck.cards[index].front = front || '';
-            deck.cards[index].back = back || '';
-            if (frontImage !== null) {
-                deck.cards[index].frontImage = frontImage || null;
-            }
-            if (backImage !== null) {
-                deck.cards[index].backImage = backImage || null;
-            }
-            Storage.saveDeck(deck);
-            this.renderCards();
-        }
-    },
-    
-    deleteCard(index) {
-        if (!this.currentDeckId) return;
-        if (confirm('Êtes-vous sûr de vouloir supprimer cette carte ?')) {
-            const deck = Storage.getDeck(this.currentDeckId);
-            if (deck && deck.cards[index]) {
-                deck.cards.splice(index, 1);
-                Storage.saveDeck(deck);
-                this.renderCards();
-                this.renderDecks();
-            }
-        }
-    },
-    
-    // ============================================
-    // RÉVISION
-    // ============================================
-    
-    renderReviewCard() {
-        if (this.currentReviewIndex >= this.reviewCards.length) {
-            const reviewCard = document.getElementById('review-card');
-            const reviewButtons = document.getElementById('review-buttons');
-            const reviewProgress = document.getElementById('review-progress');
-            
-            if (reviewCard) {
-                reviewCard.innerHTML = `
-                    <div class="card-side">
-                        <div style="display: flex; flex-direction: column; align-items: center; gap: 15px;">
-                            <div class="icon-svg" style="color: var(--success);">${Icons.getIcon('success', 48, 'var(--success)')}</div>
-                            <p style="font-size: 20px; font-weight: 600;">Félicitations !</p>
-                            <p>Vous avez terminé toutes les cartes à réviser.</p>
+        const content = `
+            <div style="padding: 10px 0;">
+                <div style="margin-bottom: 20px;">
+                    <h3 style="color: var(--primary-color); margin-bottom: 15px;">Statistiques du deck</h3>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <div style="display: flex; justify-content: space-between; padding: 10px; background: var(--surface); border-radius: 8px;">
+                            <span><strong>Total de cartes:</strong></span>
+                            <span>${totalCards}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 10px; background: var(--surface); border-radius: 8px;">
+                            <span><strong>À réviser:</strong></span>
+                            <span style="color: var(--primary-color); font-weight: 600;">${cardsDue}</span>
                         </div>
                     </div>
-                `;
-            }
-            if (reviewButtons) {
-                reviewButtons.classList.add('hidden');
-            }
-            if (reviewProgress) {
-                reviewProgress.textContent = 'Terminé';
-            }
-            return;
-        }
-        
-        // Vérifier que reviewCards est initialisé et contient des cartes
-        if (!this.reviewCards || this.reviewCards.length === 0) {
-            console.error('Aucune carte à réviser');
-            return;
-        }
-        
-        // Vérifier que l'index est valide
-        if (this.currentReviewIndex < 0 || this.currentReviewIndex >= this.reviewCards.length) {
-            console.error('Index de révision invalide:', this.currentReviewIndex);
-            return;
-        }
-        
-        // Restaurer la structure HTML si elle a été modifiée
-        const reviewCard = document.getElementById('review-card');
-        if (!reviewCard) {
-            console.error('Élément review-card non trouvé');
-            return;
-        }
-        
-        // Toujours réinitialiser la structure pour éviter les problèmes après rafraîchissement
-        if (!reviewCard.querySelector('#card-front') || !reviewCard.querySelector('#front-content')) {
-            reviewCard.innerHTML = `
-                <div id="card-front" class="card-side">
-                    <div id="review-card-color-band" class="review-card-color-band"></div>
-                    <div id="front-content" class="card-side-inner"></div>
                 </div>
-                <div id="card-back" class="card-side hidden">
-                    <div id="review-card-color-band-back" class="review-card-color-band"></div>
-                    <div id="back-content" class="card-side-inner"></div>
+                
+                <div>
+                    <h3 style="color: var(--primary-color); margin-bottom: 15px;">Répartition par difficulté</h3>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 12px; height: 12px; border-radius: 50%; background: #4CAF50;"></div>
+                            <span>Facile (30+):</span>
+                            <span style="margin-left: auto; font-weight: 600;">${cardsEasy}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 12px; height: 12px; border-radius: 50%; background: #FFC107;"></div>
+                            <span>Moyen (20-29):</span>
+                            <span style="margin-left: auto; font-weight: 600;">${cardsMedium}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 12px; height: 12px; border-radius: 50%; background: #FF9800;"></div>
+                            <span>Difficile (10-19):</span>
+                            <span style="margin-left: auto; font-weight: 600;">${cardsHard}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 12px; height: 12px; border-radius: 50%; background: #F44336;"></div>
+                            <span>Très difficile (0-9):</span>
+                            <span style="margin-left: auto; font-weight: 600;">${cardsVeryHard}</span>
+                        </div>
+                    </div>
                 </div>
-                <div id="reveal-hint" class="reveal-hint">Tapez pour révéler</div>
-            `;
-        }
+            </div>
+        `;
         
-        const card = this.reviewCards[this.currentReviewIndex];
-        if (!card) {
-            console.error('Carte non trouvée à l\'index', this.currentReviewIndex);
-            return;
-        }
-        
-        const total = this.reviewCards.length;
-        const current = this.currentReviewIndex + 1;
-        const cardScore = card.cardScore || 0;
-        const cardColor = ColorZones.getCardColor(cardScore);
-        
-        const frontContent = document.getElementById('front-content');
-        const backContent = document.getElementById('back-content');
-        const cardFront = document.getElementById('card-front');
-        const cardBack = document.getElementById('card-back');
-        const revealHint = document.getElementById('reveal-hint');
-        const reviewButtons = document.getElementById('review-buttons');
-        const reviewProgress = document.getElementById('review-progress');
-        const colorBand = document.getElementById('review-card-color-band');
-        const colorBandBack = document.getElementById('review-card-color-band-back');
-        
-        // Construire le contenu de la question avec image et/ou texte
-        if (!frontContent) {
-            console.error('Élément front-content non trouvé');
-            return;
-        }
-        
-        let frontHtml = '';
-        const hasFrontImage = card.frontImage && (typeof card.frontImage === 'string') && card.frontImage.trim() !== '';
-        const hasFrontText = card.front && (typeof card.front === 'string') && card.front.trim() !== '';
-        
-        if (hasFrontImage) {
-            frontHtml += `<div class="review-image-container" id="front-image-container"><img src="${card.frontImage}" alt="Question" class="review-image"></div>`;
-        }
-        if (hasFrontText) {
-            frontHtml += `<p class="review-text" id="front-text-element">${this.escapeHtml(card.front)}</p>`;
-        }
-        if (!frontHtml) {
-            frontHtml = '<p style="color: var(--text-secondary);">Aucun contenu pour la question</p>';
-        }
-        frontContent.innerHTML = frontHtml;
-        
-        // Appliquer la taille de texte proportionnelle si image et texte sont présents
-        if (hasFrontImage && hasFrontText) {
-            setTimeout(() => {
-                const imageContainer = document.getElementById('front-image-container');
-                const textElement = document.getElementById('front-text-element');
-                if (imageContainer && textElement) {
-                    this.applyProportionalTextSize(imageContainer, textElement);
-                }
-            }, 50);
-        }
-        
-        // Construire le contenu de la réponse avec image et/ou texte
-        if (!backContent) {
-            console.error('Élément back-content non trouvé');
-            return;
-        }
-        
-        let backHtml = '';
-        const hasBackImage = card.backImage && (typeof card.backImage === 'string') && card.backImage.trim() !== '';
-        const hasBackText = card.back && (typeof card.back === 'string') && card.back.trim() !== '';
-        
-        if (hasBackImage) {
-            backHtml += `<div class="review-image-container" id="back-image-container"><img src="${card.backImage}" alt="Réponse" class="review-image"></div>`;
-        }
-        if (hasBackText) {
-            backHtml += `<p class="review-text" id="back-text-element">${this.escapeHtml(card.back)}</p>`;
-        }
-        if (!backHtml) {
-            backHtml = '<p style="color: var(--text-secondary);">Aucun contenu pour la réponse</p>';
-        }
-        backContent.innerHTML = backHtml;
-        
-        // Appliquer la taille de texte proportionnelle si image et texte sont présents
-        if (hasBackImage && hasBackText) {
-            setTimeout(() => {
-                const imageContainer = document.getElementById('back-image-container');
-                const textElement = document.getElementById('back-text-element');
-                if (imageContainer && textElement) {
-                    this.applyProportionalTextSize(imageContainer, textElement);
-                }
-            }, 50);
-        }
-        if (cardFront) cardFront.classList.remove('hidden');
-        if (cardBack) cardBack.classList.add('hidden');
-        if (revealHint) revealHint.style.display = 'block';
-        if (reviewButtons) reviewButtons.classList.add('hidden');
-        if (reviewProgress) reviewProgress.textContent = `${current} / ${total}`;
-        if (colorBand) colorBand.style.backgroundColor = cardColor;
-        if (colorBandBack) colorBandBack.style.backgroundColor = cardColor;
-        
-        this.isRevealed = false;
+        this.showModalWithContent('Statistiques', content);
     },
-    
-    revealAnswer() {
-        if (this.isRevealed) return;
-        
-        const cardFront = document.getElementById('card-front');
-        const cardBack = document.getElementById('card-back');
-        const revealHint = document.getElementById('reveal-hint');
-        const reviewButtons = document.getElementById('review-buttons');
-        
-        if (!cardFront || !cardBack || !revealHint || !reviewButtons) return;
-        
-        this.isRevealed = true;
-        cardFront.classList.add('hidden');
-        cardBack.classList.remove('hidden');
-        revealHint.style.display = 'none';
-        reviewButtons.classList.remove('hidden');
-    },
-    
-    rateCard(quality) {
-        if (this.currentReviewIndex >= this.reviewCards.length) return;
-        
-        const card = this.reviewCards[this.currentReviewIndex];
-        const deck = Storage.getDeck(this.currentDeckId);
-        
-        if (deck) {
-            const deckCard = deck.cards.find(c => c.front === card.front && c.back === card.back);
-            if (deckCard) {
-                SM2.calculateNextReview(deckCard, quality);
-                Storage.saveDeck(deck);
-            }
-        }
-        
-        this.currentReviewIndex++;
-        this.renderReviewCard();
-    },
-    
-    // ============================================
-    // IMPORT / EXPORT
-    // ============================================
     
     exportDeck() {
         if (!this.currentDeckId) return;
-        const deck = Storage.getDeck(this.currentDeckId);
+        if (this.currentIsBaseDeck) {
+            alert('Les decks de base ne peuvent pas être exportés.');
+            return;
+        }
+        
+        const deck = this.getCurrentDeck();
         if (!deck) return;
         
-        const exportData = {
-            name: deck.name,
-            cards: deck.cards.map(card => ({
-                front: card.front || '',
-                back: card.back || '',
-                frontImage: card.frontImage || null,
-                backImage: card.backImage || null
-            }))
-        };
-        
-        const dataStr = JSON.stringify(exportData, null, 2);
+        const dataStr = JSON.stringify(deck, null, 2);
         const dataBlob = new Blob([dataStr], { type: 'application/json' });
         const url = URL.createObjectURL(dataBlob);
         const link = document.createElement('a');
         link.href = url;
         link.download = `${deck.name.replace(/[^a-z0-9]/gi, '_')}.json`;
+        document.body.appendChild(link);
         link.click();
+        document.body.removeChild(link);
         URL.revokeObjectURL(url);
     },
     
@@ -1599,700 +2579,504 @@ const App = {
         if (!file) return;
         
         const reader = new FileReader();
-        const self = this; // Sauvegarder la référence à 'this'
-        
         reader.onload = (e) => {
             try {
-                const fileContent = e.target.result;
-                console.log('Contenu du fichier (premiers 500 caractères):', fileContent.substring(0, 500));
-                
-                const importData = JSON.parse(fileContent);
-                console.log('Données JSON parsées:', importData);
-                console.log('Type de importData.cards:', typeof importData.cards, Array.isArray(importData.cards));
-                
-                // Vérifier le format
-                if (!importData.name) {
-                    throw new Error('Le fichier doit contenir un champ "name"');
+                const importData = JSON.parse(e.target.result);
+                if (!importData.name || !importData.cards || !Array.isArray(importData.cards)) {
+                    alert('Format de fichier invalide.');
+                    return;
                 }
                 
-                // Vérifier si cards existe et est un tableau
-                if (importData.cards === undefined || importData.cards === null) {
-                    throw new Error('Le fichier doit contenir un champ "cards" (tableau)');
-                }
-                
-                if (!Array.isArray(importData.cards)) {
-                    console.error('cards n\'est pas un tableau:', importData.cards);
-                    throw new Error(`Le champ "cards" doit être un tableau. Type reçu: ${typeof importData.cards}`);
-                }
-                
-                console.log('Nombre de cartes dans le fichier:', importData.cards.length);
-                
-                // Permettre l'importation d'un deck vide (on peut ajouter des cartes après)
-                if (importData.cards.length === 0) {
-                    console.warn('Le deck est vide (aucune carte). Le deck sera créé mais sans cartes.');
-                }
-                
-                // Créer le deck avec toutes les cartes
-                let validCardsCount = 0;
-                let invalidCardsCount = 0;
-                
-                const cards = importData.cards.map((card, index) => {
-                    // Vérifier que chaque carte a les champs requis
-                    if (!card) {
-                        console.warn(`Carte ${index + 1} est null ou undefined`);
-                        invalidCardsCount++;
-                        return null;
-                    }
-                    
-                    if (typeof card !== 'object') {
-                        console.warn(`Carte ${index + 1} n'est pas un objet:`, card);
-                        invalidCardsCount++;
-                        return null;
-                    }
-                    
-                    // Accepter front/back même s'ils sont vides (on les trimmera)
-                    const front = card.front !== undefined && card.front !== null ? String(card.front).trim() : '';
-                    const back = card.back !== undefined && card.back !== null ? String(card.back).trim() : '';
-                    const frontImage = card.frontImage || null;
-                    const backImage = card.backImage || null;
-                    
-                    if ((!front && !frontImage) || (!back && !backImage)) {
-                        console.warn(`Carte ${index + 1} ignorée: champs manquants ou vides`, {
-                            front: front || '(vide)',
-                            back: back || '(vide)',
-                            card: card
-                        });
-                        invalidCardsCount++;
-                        return null;
-                    }
-                    
-                    validCardsCount++;
-                    return {
-                        front: front,
-                        back: back,
-                        frontImage: frontImage,
-                        backImage: backImage,
-                        easeFactor: 2.5,
-                        interval: 1,
-                        repetitions: 0,
-                        againCount: 0,
-                        cardScore: 0,
-                        nextReview: null,
-                        lastReview: null
-                    };
-                }).filter(card => card !== null); // Filtrer les cartes invalides
-                
-                console.log(`Cartes valides: ${validCardsCount}, invalides: ${invalidCardsCount}`);
-                
-                if (cards.length === 0) {
-                    throw new Error(`Aucune carte valide trouvée dans le fichier. ${invalidCardsCount} carte(s) invalide(s) détectée(s). Vérifiez que chaque carte a les champs "front" et "back".`);
-                }
-                
+                // Initialiser toutes les propriétés nécessaires pour chaque carte
                 const deck = {
                     id: Date.now().toString(),
                     name: importData.name,
-                    cards: cards,
+                    cards: importData.cards.map(card => ({
+                        front: card.front || '',
+                        back: card.back || '',
+                        frontImage: card.frontImage || '',
+                        backImage: card.backImage || '',
+                        cardScore: 0,
+                        againCount: 0,
+                        easeFactor: 2.5,
+                        interval: 1,
+                        repetitions: 0,
+                        nextReview: null,
+                        lastReview: null
+                    })),
                     createdAt: Date.now()
                 };
                 
                 Storage.saveDeck(deck);
-                self.renderDecks();
-                
-                let message = `Deck "${deck.name}" importé avec succès !\n${deck.cards.length} carte(s) importée(s).`;
-                if (deck.cards.length === 0) {
-                    message += '\n\nLe deck est vide. Vous pouvez ajouter des cartes en ouvrant le deck.';
-                }
-                if (invalidCardsCount > 0) {
-                    message += `\n${invalidCardsCount} carte(s) invalide(s) ignorée(s).`;
-                }
-                alert(message);
-                
+                this.renderDecks();
+                alert(`Deck "${deck.name}" importé avec succès !`);
             } catch (error) {
-                console.error('Erreur lors de l\'import:', error);
-                console.error('Stack trace:', error.stack);
-                alert('Erreur lors de l\'import : ' + error.message + '\n\nVérifiez la console (F12) pour plus de détails.');
+                alert('Erreur lors de l\'importation du deck.');
+                console.error(error);
             }
         };
-        
-        reader.onerror = () => {
-            alert('Erreur lors de la lecture du fichier');
-        };
-        
         reader.readAsText(file);
-        event.target.value = '';
+        event.target.value = ''; // Réinitialiser l'input
     },
     
-    // ============================================
-    // SERVICE WORKER
-    // ============================================
-    
-    registerServiceWorker() {
-        if ('serviceWorker' in navigator) {
-            // Vérifier que nous ne sommes pas en mode file://
-            if (window.location.protocol === 'file:') {
-                console.log('Service Worker désactivé en mode file://');
-                return;
-            }
-            
-            // Essayer d'enregistrer immédiatement si le DOM est prêt
-            const registerSW = () => {
-                navigator.serviceWorker.register('./service-worker.js')
-                    .then(reg => {
-                        console.log('Service Worker enregistré');
-                        this.serviceWorkerRegistration = reg;
-                        
-                        // Vérifier si le service worker est déjà actif
-                        if (reg.active) {
-                            console.log('Service Worker déjà actif');
-                        } else if (reg.installing) {
-                            console.log('Service Worker en cours d\'installation');
-                            reg.installing.addEventListener('statechange', () => {
-                                if (reg.installing.state === 'activated') {
-                                    console.log('Service Worker activé');
-                                }
-                            });
-                        } else if (reg.waiting) {
-                            console.log('Service Worker en attente');
-                        }
-                        
-                        // Demander la permission pour les notifications après l'installation
-                        this.requestNotificationPermission();
-                    })
-                    .catch(err => {
-                        // Ignorer silencieusement l'erreur en mode développement
-                        if (window.location.protocol !== 'file:') {
-                            console.log('Erreur Service Worker:', err);
-                        }
-                    });
-            };
-            
-            // Essayer d'enregistrer immédiatement si le document est prêt
-            if (document.readyState === 'complete' || document.readyState === 'interactive') {
-                registerSW();
-            } else {
-                // Sinon, attendre le chargement
-                window.addEventListener('load', registerSW);
-            }
-        }
-    },
-    
-    // Demander la permission pour les notifications
-    async requestNotificationPermission() {
-        if (!('Notification' in window)) {
-            console.log('Ce navigateur ne supporte pas les notifications');
-            return;
-        }
-        
-        // Vérifier si la permission a déjà été accordée
-        if (Notification.permission === 'granted') {
-            console.log('Permission de notification déjà accordée');
-            return;
-        }
-        
-        // Vérifier si la permission a été refusée
-        if (Notification.permission === 'denied') {
-            console.log('Permission de notification refusée');
-            return;
-        }
-        
-        // Demander la permission (seulement si elle n'a pas encore été demandée)
-        // On ne demande pas automatiquement, on laisse l'utilisateur le faire via le menu
-    },
-    
-    // Attendre que le service worker soit enregistré
-    async waitForServiceWorker(maxWait = 5000) {
-        if (this.serviceWorkerRegistration) {
-            return true;
-        }
-        
-        return new Promise((resolve) => {
-            const startTime = Date.now();
-            const checkInterval = setInterval(() => {
-                if (this.serviceWorkerRegistration) {
-                    clearInterval(checkInterval);
-                    resolve(true);
-                } else if (Date.now() - startTime > maxWait) {
-                    clearInterval(checkInterval);
-                    resolve(false);
-                }
-            }, 100);
-        });
-    },
-    
-    // Demander explicitement la permission et configurer les notifications
-    async enableNotifications() {
-        if (!('Notification' in window)) {
-            alert('Votre navigateur ne supporte pas les notifications');
-            return false;
-        }
-        
-        // Attendre que le service worker soit enregistré
-        const isReady = await this.waitForServiceWorker();
-        if (!isReady) {
-            alert('Le service worker n\'a pas pu être enregistré. Veuillez rafraîchir la page.');
-            return false;
-        }
-        
-        const permission = await Notification.requestPermission();
-        
-        if (permission === 'granted') {
-            console.log('Permission de notification accordée');
-            return true;
-        } else {
-            alert('Permission de notification refusée. Vous pouvez l\'activer dans les paramètres de votre navigateur.');
-            return false;
-        }
-    },
-    
-    // Configurer les rappels de révision par deck
     configureReviewReminders() {
-        // Vérifier si on est sur mobile
-        if (!this.isMobile()) {
-            this.showModal(
-                'Rappels non disponibles',
-                `<div style="text-align: center; padding: 20px;">
-                    <div style="display: inline-flex; align-items: center; justify-content: center; width: 80px; height: 80px; margin: 0 auto 20px; background: var(--primary-color); border-radius: 50%;">
-                        ${Icons.getIcon('smartphone', 48, 'white')}
-                    </div>
-                    <h3 style="margin-bottom: 15px; color: var(--text-primary);">Rappels disponibles uniquement sur mobile</h3>
-                    <p style="color: var(--text-secondary); line-height: 1.6;">
-                        La fonctionnalité de rappels de révision est uniquement disponible sur les appareils mobiles (iPhone, Android).<br><br>
-                        Sur ordinateur, vous pouvez toujours utiliser l'application pour réviser vos flashcards, mais les notifications de rappel ne sont pas disponibles.
-                    </p>
-                </div>`
-            );
-            return;
-        }
-        
+        // Charger les rappels existants depuis localStorage
+        const savedReminders = JSON.parse(localStorage.getItem('flashcards_reminders') || '[]');
         const decks = Storage.getDecks();
         
-        // Charger les rappels existants
-        this.loadActiveReminders().then(reminders => {
-            const remindersMap = {};
-            reminders.forEach(r => {
-                remindersMap[r.deckId] = r;
-            });
-            
-            const content = `
-                <div style="line-height: 1.8;">
-                    <div class="form-group">
-                        <label for="reminder-deck" class="form-label-custom">
-                            <span class="label-icon">${Icons.getIcon('books', 18, 'var(--primary-color)')}</span>
-                            <span>Deck</span>
-                        </label>
-                        <div class="custom-select-wrapper">
-                            <select id="reminder-deck" class="custom-select" required>
-                                <option value="">-- Sélectionner un deck --</option>
-                                ${decks.map(deck => `
-                                    <option value="${deck.id}" data-name="${this.escapeHtml(deck.name)}">${this.escapeHtml(deck.name)}</option>
-                                `).join('')}
-                            </select>
-                            <span class="custom-select-arrow">${Icons.getIcon('arrowDown', 12, 'var(--text-secondary)')}</span>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="reminder-interval" class="form-label-custom">
-                            <span class="label-icon">${Icons.getIcon('clock', 18, 'var(--primary-color)')}</span>
-                            <span>Intervalle entre les notifications</span>
-                        </label>
-                        <div class="custom-select-wrapper">
-                            <select id="reminder-interval" class="custom-select" required>
-                                <option value="15">15 minutes</option>
-                                <option value="30">30 minutes</option>
-                                <option value="60" selected>1 heure</option>
-                                <option value="120">2 heures</option>
-                                <option value="180">3 heures</option>
-                                <option value="240">4 heures</option>
-                                <option value="360">6 heures</option>
-                                <option value="480">8 heures</option>
-                                <option value="720">12 heures</option>
-                                <option value="1440">24 heures (1 jour)</option>
-                            </select>
-                            <span class="custom-select-arrow">${Icons.getIcon('arrowDown', 12, 'var(--text-secondary)')}</span>
-                        </div>
-                    </div>
-                    <div class="form-actions" style="margin-top: 25px;">
-                        <button type="button" class="btn btn-primary btn-add-reminder" id="add-reminder-btn">
-                            <span class="btn-icon">+</span>
-                            <span>Ajouter un rappel</span>
-                        </button>
-                    </div>
-                    <div class="reminders-section">
-                        <div class="reminders-section-header">
-                            <h4 class="reminders-title">
-                                <span class="title-icon">${Icons.getIcon('bell', 20, 'var(--primary-color)')}</span>
-                                Rappels actifs
-                            </h4>
-                        </div>
-                        <div id="active-reminders-list" class="reminders-list">
-                            ${this.renderActiveRemindersList(reminders, decks)}
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            this.showModal('Rappels de révision par deck', content);
-            
-            setTimeout(async () => {
-                const addBtn = document.getElementById('add-reminder-btn');
-                const deckSelect = document.getElementById('reminder-deck');
-                const intervalSelect = document.getElementById('reminder-interval');
-                
-                if (addBtn) {
-                    addBtn.addEventListener('click', async () => {
-                        const deckId = deckSelect.value;
-                        const intervalMinutes = parseInt(intervalSelect.value);
-                        
-                        if (!deckId) {
-                            alert('Veuillez sélectionner un deck');
-                            return;
-                        }
-                        
-                        // Vérifier si un rappel existe déjà pour ce deck
-                        const existingReminder = reminders.find(r => r.deckId === deckId);
-                        if (existingReminder) {
-                            if (!confirm('Un rappel existe déjà pour ce deck. Voulez-vous le remplacer ?')) {
-                                return;
-                            }
-                        }
-                        
-                        // Demander la permission si nécessaire
-                        const hasPermission = await this.enableNotifications();
-                        if (!hasPermission) {
-                            return;
-                        }
-                        
-                        if (!existingReminder) {
-                        }
-                        const deck = Storage.getDeck(deckId);
-                        const deckName = deck ? deck.name : deckSelect.options[deckSelect.selectedIndex].dataset.name;
-                        
-                        // Envoyer au service worker
-                        if (this.serviceWorkerRegistration && this.serviceWorkerRegistration.active) {
-                            this.serviceWorkerRegistration.active.postMessage({
-                                type: 'ADD_REMINDER',
-                                deckId: deckId,
-                                deckName: deckName,
-                                intervalMinutes: intervalMinutes
-                            });
-                        }
-                        
-                        // Recharger la liste
-                        setTimeout(() => {
-                            this.loadActiveReminders().then(newReminders => {
-                                const listContainer = document.getElementById('active-reminders-list');
-                                if (listContainer) {
-                                    listContainer.innerHTML = this.renderActiveRemindersList(newReminders, decks);
-                                    // Réattacher les événements de suppression
-                                    this.attachRemoveReminderListeners(newReminders);
-                                }
-                            });
-                        }, 100);
-                        
-                        alert(`Rappel configuré pour "${deckName}" toutes les ${intervalMinutes} minutes`);
-                    });
-                }
-                
-                // Attacher les événements de suppression
-                this.attachRemoveReminderListeners(reminders);
-            }, 10);
-        });
-    },
-    
-    // Charger les rappels actifs depuis le service worker
-    async loadActiveReminders() {
-        // Attendre que le service worker soit enregistré
-        const isReady = await this.waitForServiceWorker();
-        if (!isReady) {
-            return Promise.resolve([]);
-        }
-        
-        return new Promise((resolve) => {
-            if (!this.serviceWorkerRegistration) {
-                resolve([]);
-                return;
-            }
-            
-            // Attendre que le service worker soit actif
-            const getActiveSW = async () => {
-                if (this.serviceWorkerRegistration.active) {
-                    return this.serviceWorkerRegistration.active;
-                }
-                // Attendre un peu si le service worker n'est pas encore actif
-                await new Promise(r => setTimeout(r, 100));
-                if (this.serviceWorkerRegistration.active) {
-                    return this.serviceWorkerRegistration.active;
-                }
-                return null;
-            };
-            
-            getActiveSW().then(activeSW => {
-                if (!activeSW) {
-                    resolve([]);
-                    return;
-                }
-                
-                const channel = new MessageChannel();
-                channel.port1.onmessage = (event) => {
-                    resolve(event.data.reminders || []);
-                };
-                
-                activeSW.postMessage({
-                    type: 'GET_ALL_REMINDERS'
-                }, [channel.port2]);
-                
-                // Timeout après 2 secondes
-                setTimeout(() => {
-                    resolve([]);
-                }, 2000);
-            });
-        });
-    },
-    
-    // Rendre la liste des rappels actifs
-    renderActiveRemindersList(reminders, decks) {
-        if (!reminders || reminders.length === 0) {
-            return '<p style="color: var(--text-secondary); text-align: center; padding: 20px;">Aucun rappel actif</p>';
-        }
-        
-        const now = Date.now();
-        
-        return reminders.map(reminder => {
-            const deck = decks.find(d => d.id === reminder.deckId);
-            const deckName = deck ? deck.name : reminder.deckName || 'Deck inconnu';
-            const nextNotification = reminder.nextNotification || (now + reminder.intervalMinutes * 60 * 1000);
-            const nextDate = new Date(nextNotification);
-            const timeUntil = nextDate - now;
-            const hoursUntil = Math.floor(timeUntil / (1000 * 60 * 60));
-            const minutesUntil = Math.floor((timeUntil % (1000 * 60 * 60)) / (1000 * 60));
-            
-            let timeText = '';
-            if (hoursUntil > 0) {
-                timeText = `dans ${hoursUntil}h ${minutesUntil}min`;
-            } else if (minutesUntil > 0) {
-                timeText = `dans ${minutesUntil}min`;
-            } else {
-                timeText = 'bientôt';
-            }
-            
-            // Formater l'intervalle de manière plus lisible
-            let intervalText = '';
-            if (reminder.intervalMinutes < 60) {
-                intervalText = `${reminder.intervalMinutes} min`;
-            } else if (reminder.intervalMinutes < 1440) {
-                const hours = Math.floor(reminder.intervalMinutes / 60);
-                intervalText = hours === 1 ? '1 heure' : `${hours} heures`;
-            } else {
-                intervalText = '1 jour';
-            }
-            
-            return `
-                <div class="reminder-item" data-deck-id="${reminder.deckId}">
-                    <div class="reminder-item-content">
-                        <div class="reminder-item-title">${this.escapeHtml(deckName)}</div>
-                        <div class="reminder-item-details">
-                            <span style="color: var(--primary-color); font-weight: 600;">Toutes les ${intervalText}</span> • Prochaine notification ${timeText}
-                        </div>
-                    </div>
-                    <button class="btn-remove-reminder" data-deck-id="${reminder.deckId}">Supprimer</button>
-                </div>
-            `;
-        }).join('');
-    },
-    
-    // Attacher les événements de suppression
-    attachRemoveReminderListeners(reminders) {
-        document.querySelectorAll('.btn-remove-reminder').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const deckId = btn.dataset.deckId;
-                const reminder = reminders.find(r => r.deckId === deckId);
-                
-                if (reminder && confirm(`Supprimer le rappel pour "${reminder.deckName || 'ce deck'}" ?`)) {
-                    if (this.serviceWorkerRegistration && this.serviceWorkerRegistration.active) {
-                        this.serviceWorkerRegistration.active.postMessage({
-                            type: 'REMOVE_REMINDER',
-                            deckId: deckId
+        // Synchroniser les rappels avec le service worker au chargement
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then(registration => {
+                savedReminders.forEach(reminder => {
+                    const deck = decks.find(d => d.id === reminder.deckId);
+                    if (deck && registration.active) {
+                        registration.active.postMessage({
+                            type: 'ADD_REMINDER',
+                            deckId: reminder.deckId,
+                            deckName: deck.name,
+                            intervalMinutes: reminder.intervalMinutes
                         });
                     }
-                    
-                    // Recharger la liste
-                    setTimeout(() => {
-                        this.loadActiveReminders().then(newReminders => {
-                            const decks = Storage.getDecks();
-                            const listContainer = document.getElementById('active-reminders-list');
-                            if (listContainer) {
-                                listContainer.innerHTML = this.renderActiveRemindersList(newReminders, decks);
-                                this.attachRemoveReminderListeners(newReminders);
-                            }
-                        });
-                    }, 100);
-                }
+                });
             });
-        });
-    },
-    
-    // ============================================
-    // BANDEAU DE NOTIFICATION
-    // ============================================
-    
-    // Variable pour stocker l'intervalle du son
-    notificationSoundInterval: null,
-    notificationAudioContext: null,
-    
-    // Créer un son de notification
-    createNotificationSound() {
-        try {
-            // Réutiliser le contexte audio s'il existe, sinon en créer un nouveau
-            if (!this.notificationAudioContext) {
-                this.notificationAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
+        }
+        
+        const content = `
+            <div style="padding: 10px 0;">
+                <div class="form-group">
+                    <label class="form-label-custom">
+                        <span class="label-icon">${Icons.getIcon('bell', 18, 'var(--primary-color)')}</span>
+                        <span>Configurer un rappel de révision</span>
+                    </label>
+                    <div class="custom-select-wrapper">
+                        <select id="reminder-deck-select" class="custom-select">
+                            <option value="">Sélectionner un deck</option>
+                            ${decks.map(deck => `<option value="${deck.id}">${this.escapeHtml(deck.name)}</option>`).join('')}
+                        </select>
+                        <div class="custom-select-arrow">
+                            ${Icons.getIcon('arrowDown', 12, 'currentColor')}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label-custom">
+                        <span class="label-icon">${Icons.getIcon('clock', 18, 'var(--primary-color)')}</span>
+                        <span>Intervalle de rappel</span>
+                    </label>
+                    <div class="custom-select-wrapper">
+                        <select id="reminder-interval-select" class="custom-select">
+                            <option value="60">Toutes les heures</option>
+                            <option value="120">Toutes les 2 heures</option>
+                            <option value="180">Toutes les 3 heures</option>
+                            <option value="360">Toutes les 6 heures</option>
+                            <option value="720">Toutes les 12 heures</option>
+                            <option value="1440" selected>Tous les jours</option>
+                            <option value="2880">Tous les 2 jours</option>
+                            <option value="10080">Toutes les semaines</option>
+                            <option value="custom">Personnalisé</option>
+                        </select>
+                        <div class="custom-select-arrow">
+                            ${Icons.getIcon('arrowDown', 12, 'currentColor')}
+                        </div>
+                    </div>
+                    <div id="custom-interval-container" style="display: none; margin-top: 12px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <input type="number" id="custom-interval-input" placeholder="Ex: 30" min="1" style="flex: 1; padding: 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 16px; font-family: inherit; transition: border-color 0.2s ease;">
+                            <span style="color: var(--text-secondary); font-size: 14px; white-space: nowrap;">en minutes</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <button type="button" id="add-reminder-btn" class="btn btn-primary btn-add-reminder">
+                    <span class="btn-icon">+</span>
+                    <span>Ajouter le rappel</span>
+                </button>
+                
+                <div class="reminders-section">
+                    <div class="reminders-section-header">
+                        <h3 class="reminders-title">
+                            <span class="title-icon">${Icons.getIcon('bell', 20, 'var(--primary-color)')}</span>
+                            Rappels actifs
+                        </h3>
+                    </div>
+                    <div class="reminders-list" id="reminders-list">
+                        ${savedReminders.length === 0 ? '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">Aucun rappel configuré</p>' : ''}
+                        ${savedReminders.map((reminder, index) => {
+                            const deck = decks.find(d => d.id === reminder.deckId);
+                            const deckName = deck ? deck.name : 'Deck supprimé';
+                            const intervalText = this.getIntervalText(reminder.intervalMinutes);
+                            return `
+                                <div class="reminder-item" data-reminder-index="${index}">
+                                    <div class="reminder-item-content">
+                                        <div class="reminder-item-title">${this.escapeHtml(deckName)}</div>
+                                        <div class="reminder-item-details">Rappel : ${intervalText}</div>
+                                    </div>
+                                    <button class="btn-remove-reminder" data-reminder-index="${index}">Supprimer</button>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        this.showModalWithContent('Rappels de révision', content);
+        
+        requestAnimationFrame(() => {
+            // Gérer l'affichage du champ personnalisé
+            const intervalSelect = document.getElementById('reminder-interval-select');
+            const customIntervalContainer = document.getElementById('custom-interval-container');
+            const customIntervalInput = document.getElementById('custom-interval-input');
             
-            const audioContext = this.notificationAudioContext;
-            
-            // Reprendre le contexte s'il est suspendu (nécessaire pour certains navigateurs)
-            if (audioContext.state === 'suspended') {
-                audioContext.resume().catch(() => {
-                    // Ignorer l'erreur si on ne peut pas reprendre
+            if (intervalSelect && customIntervalContainer && customIntervalInput) {
+                // Ajouter le style focus pour le champ personnalisé
+                customIntervalInput.addEventListener('focus', () => {
+                    customIntervalInput.style.borderColor = 'var(--primary-color)';
+                });
+                
+                customIntervalInput.addEventListener('blur', () => {
+                    if (!customIntervalInput.value) {
+                        customIntervalInput.style.borderColor = 'var(--border)';
+                    }
+                });
+                
+                intervalSelect.addEventListener('change', () => {
+                    if (intervalSelect.value === 'custom') {
+                        customIntervalContainer.style.display = 'block';
+                        customIntervalInput.focus();
+                    } else {
+                        customIntervalContainer.style.display = 'none';
+                        customIntervalInput.value = '';
+                    }
                 });
             }
             
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
+            // Event listener pour ajouter un rappel
+            const addReminderBtn = document.getElementById('add-reminder-btn');
+            if (addReminderBtn) {
+                addReminderBtn.addEventListener('click', () => {
+                    const deckId = document.getElementById('reminder-deck-select').value;
+                    let intervalMinutes;
+                    
+                    if (intervalSelect && intervalSelect.value === 'custom') {
+                        const customValue = parseInt(customIntervalInput.value);
+                        if (!customValue || customValue < 1) {
+                            alert('Veuillez entrer un nombre de minutes valide (minimum 1 minute).');
+                            return;
+                        }
+                        intervalMinutes = customValue;
+                    } else {
+                        intervalMinutes = parseInt(intervalSelect.value);
+                    }
+                    
+                    if (!deckId) {
+                        alert('Veuillez sélectionner un deck.');
+                        return;
+                    }
+                    
+                    // Vérifier si un rappel existe déjà pour ce deck
+                    const existingIndex = savedReminders.findIndex(r => r.deckId === deckId);
+                    if (existingIndex >= 0) {
+                        savedReminders[existingIndex].intervalMinutes = intervalMinutes;
+                    } else {
+                        savedReminders.push({
+                            deckId: deckId,
+                            intervalMinutes: intervalMinutes
+                        });
+                    }
+                    
+                    localStorage.setItem('flashcards_reminders', JSON.stringify(savedReminders));
+                    
+                    // Demander la permission de notification si nécessaire
+                    this.requestNotificationPermission().then(() => {
+                        // Envoyer un message au service worker pour ajouter/mettre à jour le rappel
+                        if ('serviceWorker' in navigator) {
+                            navigator.serviceWorker.ready.then(registration => {
+                                const deck = decks.find(d => d.id === deckId);
+                                const deckName = deck ? deck.name : 'Deck';
+                                
+                                if (registration.active) {
+                                    registration.active.postMessage({
+                                        type: 'ADD_REMINDER',
+                                        deckId: deckId,
+                                        deckName: deckName,
+                                        intervalMinutes: intervalMinutes
+                                    });
+                                }
+                            });
+                        }
+                    }).catch(() => {
+                        // Permission refusée, mais on sauvegarde quand même dans localStorage
+                        console.log('Permission de notification refusée');
+                    });
+                    
+                    // Recharger la modale pour afficher les changements
+                    this.configureReviewReminders();
+                });
+            }
             
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            
-            // Fréquence de 800 Hz pour un son agréable
-            oscillator.frequency.value = 800;
-            oscillator.type = 'sine';
-            
-            // Volume (gain) - plus doux
-            gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-            
-            oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 0.3);
-            
-            return audioContext;
+            // Event listeners pour supprimer les rappels
+            document.querySelectorAll('.btn-remove-reminder').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const index = parseInt(e.target.getAttribute('data-reminder-index'));
+                    savedReminders.splice(index, 1);
+                    localStorage.setItem('flashcards_reminders', JSON.stringify(savedReminders));
+                    
+                    // Envoyer un message au service worker pour supprimer le rappel
+                    if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.ready.then(registration => {
+                            const removedReminder = savedReminders[index];
+                            if (removedReminder && registration.active) {
+                                registration.active.postMessage({
+                                    type: 'REMOVE_REMINDER',
+                                    deckId: removedReminder.deckId
+                                });
+                            }
+                        });
+                    }
+                    
+                    // Recharger la modale
+                    this.configureReviewReminders();
+                });
+            });
+        }, 10);
+    },
+    
+    getIntervalText(intervalMinutes) {
+        if (intervalMinutes < 60) {
+            return `Toutes les ${intervalMinutes} minutes`;
+        } else if (intervalMinutes === 60) {
+            return 'Toutes les heures';
+        } else if (intervalMinutes < 1440) {
+            const hours = intervalMinutes / 60;
+            return `Toutes les ${hours} heures`;
+        } else if (intervalMinutes === 1440) {
+            return 'Tous les jours';
+        } else if (intervalMinutes < 10080) {
+            const days = intervalMinutes / 1440;
+            return `Tous les ${days} jours`;
+        } else {
+            const weeks = intervalMinutes / 10080;
+            return `Toutes les ${weeks} semaines`;
+        }
+    },
+    
+    async requestNotificationPermission() {
+        if (!('Notification' in window)) {
+            console.log('Les notifications ne sont pas supportées par ce navigateur.');
+            return Promise.resolve();
+        }
+        
+        if (Notification.permission === 'granted') {
+            return Promise.resolve();
+        }
+        
+        if (Notification.permission === 'denied') {
+            alert('Les notifications ont été bloquées. Veuillez les autoriser dans les paramètres de votre navigateur pour recevoir les rappels de révision.');
+            return Promise.reject();
+        }
+        
+        // Demander la permission
+        try {
+            const permission = await Notification.requestPermission();
+            if (permission === 'granted') {
+                return Promise.resolve();
+            } else {
+                alert('Les notifications sont nécessaires pour recevoir les rappels de révision. Veuillez les autoriser.');
+                return Promise.reject();
+            }
         } catch (error) {
-            console.log('Impossible de créer le son de notification:', error);
-            return null;
+            console.error('Erreur lors de la demande de permission:', error);
+            return Promise.reject();
         }
     },
     
-    // Jouer le son en boucle
-    playNotificationSoundLoop() {
-        // Arrêter le son précédent s'il existe
-        this.stopNotificationSound();
-        
-        // Jouer le son toutes les 2 secondes
-        this.notificationSoundInterval = setInterval(() => {
-            this.createNotificationSound();
-        }, 2000);
-        
-        // Jouer immédiatement
-        this.createNotificationSound();
-    },
-    
-    // Arrêter le son
-    stopNotificationSound() {
-        if (this.notificationSoundInterval) {
-            clearInterval(this.notificationSoundInterval);
-            this.notificationSoundInterval = null;
-        }
-        // Optionnel : fermer le contexte audio pour économiser les ressources
-        // On ne le fait pas pour pouvoir réutiliser le contexte
-    },
-    
-    // Afficher le toast de notification (style simple comme une notification native)
-    showNotificationBanner(deckName = 'Vos flashcards', deckId = null) {
-        const toast = document.getElementById('notification-toast');
-        const messageEl = document.getElementById('notification-toast-message');
-        
-        if (!toast || !messageEl) return;
-        
-        // Mettre à jour le message (style simple comme l'import)
-        messageEl.textContent = `Il est temps de réviser : ${deckName}`;
-        
-        // Stocker le deckId
-        if (toast.dataset) {
-            toast.dataset.deckId = deckId || '';
-        }
-        
-        // Afficher le toast
-        toast.classList.remove('hidden');
-        
-        // Jouer le son en boucle
-        this.playNotificationSoundLoop();
-        
-        // Configurer le bouton OK
-        const okBtn = document.getElementById('notification-toast-ok');
-        
-        if (okBtn) {
-            // Supprimer les anciens listeners
-            const newOkBtn = okBtn.cloneNode(true);
-            okBtn.parentNode.replaceChild(newOkBtn, okBtn);
-            
-            newOkBtn.addEventListener('click', () => {
-                this.hideNotificationBanner();
-                // Arrêter le son
-                this.stopNotificationSound();
-                
-                // Optionnel : ouvrir le deck si un deckId est fourni
-                if (deckId) {
-                    setTimeout(() => {
-                        this.showDeckDetailView(deckId);
-                    }, 300);
+    registerServiceWorker() {
+        if ('serviceWorker' in navigator) {
+            // Utiliser un chemin relatif pour le service worker
+            const swPath = './service-worker.js';
+            navigator.serviceWorker.register(swPath).catch(err => {
+                // Ignorer l'erreur si on est en file:// (développement local)
+                if (window.location.protocol !== 'file:') {
+                    console.error('Service Worker registration failed:', err);
                 }
             });
         }
     },
     
-    // Masquer le toast de notification
-    hideNotificationBanner() {
-        const toast = document.getElementById('notification-toast');
-        if (toast) {
-            toast.classList.add('hidden');
+    checkFirstVisit() {
+        // Vérifier si c'est la première visite
+        const hasVisited = localStorage.getItem('flashcards_hasVisited');
+        if (!hasVisited) {
+            // Marquer comme visité
+            localStorage.setItem('flashcards_hasVisited', 'true');
+            // Ouvrir automatiquement le popup d'aide après un court délai
+            setTimeout(() => {
+                this.showHelpModal();
+            }, 500);
         }
-        // Arrêter le son
-        this.stopNotificationSound();
     },
     
-    // Détecter si on est sur mobile
-    isMobile() {
-        const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-        const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i;
-        return mobileRegex.test(userAgent.toLowerCase());
-    },
-    
-    // Détecter si on est sur iOS/iPhone
-    isIOS() {
-        const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-        return /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
-    },
-    
-    // Détecter si on est sur Windows
-    isWindows() {
-        return navigator.platform.toLowerCase().includes('win') || 
-               navigator.userAgent.toLowerCase().includes('windows');
-    },
-    
-    // Écouter les messages du service worker
     setupServiceWorkerMessageListener() {
+        // Écouter les messages du service worker
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.addEventListener('message', (event) => {
-                // Sur mobile uniquement, on peut gérer les messages du service worker
-                // Sur desktop, les rappels sont désactivés donc on ignore ces messages
-                if (this.isMobile()) {
-                    if (event.data && event.data.type === 'OPEN_DECK') {
-                        const { deckId } = event.data;
-                        if (deckId) {
-                            this.showDeckDetailView(deckId);
-                        }
-                    }
+                if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+                    // Afficher une notification si nécessaire
                 }
             });
         }
+    },
+    
+    isMobile() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    },
+    
+    showHelpModal() {
+        const content = `
+            <div class="help-modal-container">
+                <div class="help-pages-wrapper">
+                    <div class="help-page active">
+                        <h3 class="help-page-title">
+                            <span class="icon-svg">${Icons.getIcon('help', 24, 'var(--primary-color)')}</span>
+                            Qu'est-ce qu'une flashcard ?
+                        </h3>
+                        <div class="help-page-content">
+                            <p><strong>ShardCards</strong> utilise le principe des <strong>flashcards</strong> (cartes flash) pour mémoriser efficacement.</p>
+                            <p style="margin-top: 10px;"><strong>Qu'est-ce qu'une flashcard ?</strong></p>
+                            <p>Une carte avec deux faces : <strong>recto</strong> (question/concept) et <strong>verso</strong> (réponse/explication).</p>
+                            <p style="margin-top: 10px;"><strong>Comment ça fonctionne ?</strong></p>
+                            <p>Regardez le recto, essayez de vous souvenir du verso, puis vérifiez. Plus vous révisez, mieux vous mémorisez !</p>
+                            <p style="margin-top: 10px;"><strong>Pourquoi c'est efficace ?</strong></p>
+                            <p>La <strong>répétition espacée</strong> : les cartes difficiles sont présentées plus souvent, les faciles moins souvent. Cela optimise votre temps et renforce votre mémoire.</p>
+                        </div>
+                    </div>
+                    <div class="help-page">
+                        <h3 class="help-page-title">
+                            <span class="icon-svg">${Icons.getIcon('help', 24, 'var(--primary-color)')}</span>
+                            Bienvenue dans ShardCards
+                        </h3>
+                        <div class="help-page-content">
+                            <p><strong>Créer un deck :</strong> Cliquez sur le bouton <strong>+</strong> en bas à droite, puis entrez un nom.</p>
+                            <p style="margin-top: 10px;"><strong>Ajouter des cartes :</strong> Ouvrez un deck, puis cliquez sur <strong>+</strong> pour ajouter une carte (recto/verso).</p>
+                            <p style="margin-top: 10px;"><strong>Actions sur les decks :</strong> Maintenez un appui long sur un deck pour réviser ou supprimer.</p>
+                        </div>
+                    </div>
+                    <div class="help-page">
+                        <h3 class="help-page-title">
+                            <span class="icon-svg">${Icons.getIcon('refresh', 24, 'var(--primary-color)')}</span>
+                            Réviser vos cartes
+                        </h3>
+                        <div class="help-page-content">
+                            <p><strong>Comment réviser :</strong> Maintenez un appui long sur un deck et sélectionnez "Réviser", ou utilisez le menu hamburger.</p>
+                            <p style="margin-top: 10px;"><strong>Système de révision :</strong> Algorithme intelligent qui privilégie les cartes difficiles. Couleurs selon la difficulté :</p>
+                            <ul style="margin-top: 8px; padding-left: 20px; font-size: 14px;">
+                                <li><span style="color: #F44336;">🔴 Rouge</span> : Très difficile</li>
+                                <li><span style="color: #FF9800;">🟠 Orange</span> : Difficile</li>
+                                <li><span style="color: #FFC107;">🟡 Jaune</span> : Moyen</li>
+                                <li><span style="color: #4CAF50;">🟢 Vert</span> : Facile</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="help-page">
+                        <h3 class="help-page-title">
+                            <span class="icon-svg">${Icons.getIcon('settings', 24, 'var(--primary-color)')}</span>
+                            Fonctionnalités
+                        </h3>
+                        <div class="help-page-content">
+                            <p><strong>Decks de base :</strong> Decks prédéfinis dans l'onglet "Decks de Base". Révisables mais non modifiables.</p>
+                            <p style="margin-top: 10px;"><strong>Import/Export :</strong> Exportez vos decks (sauvegarde/partage) ou importez depuis des fichiers JSON.</p>
+                            <p style="margin-top: 10px;"><strong>Statistiques :</strong> Consultez la répartition des difficultés via le menu hamburger.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="help-navigation">
+                    <button class="help-nav-btn" id="help-prev-btn" disabled>
+                        <span class="icon-svg">${Icons.getIcon('arrowLeft', 20, 'white')}</span>
+                    </button>
+                    <div class="help-dots">
+                        <span class="help-dot active" data-page="0"></span>
+                        <span class="help-dot" data-page="1"></span>
+                        <span class="help-dot" data-page="2"></span>
+                        <span class="help-dot" data-page="3"></span>
+                    </div>
+                    <button class="help-nav-btn" id="help-next-btn">
+                        <span class="icon-svg">${Icons.getIcon('arrowRight', 20, 'white')}</span>
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        this.showModalWithContent('Aide', content);
+        
+        // Initialiser la navigation de l'aide immédiatement
+        requestAnimationFrame(() => {
+            this.initHelpNavigation();
+        });
+    },
+    
+    initHelpNavigation() {
+        let currentPage = 0;
+        const totalPages = 4;
+        const pages = document.querySelectorAll('.help-page');
+        const dots = document.querySelectorAll('.help-dot');
+        const prevBtn = document.getElementById('help-prev-btn');
+        const nextBtn = document.getElementById('help-next-btn');
+        
+        const updatePage = (pageIndex) => {
+            // Mettre à jour les pages
+            pages.forEach((page, index) => {
+                if (index === pageIndex) {
+                    page.classList.add('active');
+                } else {
+                    page.classList.remove('active');
+                }
+            });
+            
+            // Mettre à jour les dots
+            dots.forEach((dot, index) => {
+                if (index === pageIndex) {
+                    dot.classList.add('active');
+                } else {
+                    dot.classList.remove('active');
+                }
+            });
+            
+            // Mettre à jour les boutons
+            if (prevBtn) {
+                prevBtn.disabled = pageIndex === 0;
+            }
+            if (nextBtn) {
+                nextBtn.disabled = pageIndex === totalPages - 1;
+            }
+        };
+        
+        if (prevBtn) {
+            prevBtn.addEventListener('click', () => {
+                if (currentPage > 0) {
+                    currentPage--;
+                    updatePage(currentPage);
+                }
+            });
+        }
+        
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => {
+                if (currentPage < totalPages - 1) {
+                    currentPage++;
+                    updatePage(currentPage);
+                }
+            });
+        }
+        
+        // Navigation par dots
+        dots.forEach((dot, index) => {
+            dot.addEventListener('click', () => {
+                currentPage = index;
+                updatePage(currentPage);
+            });
+        });
     },
     
     // ============================================
@@ -2300,261 +3084,16 @@ const App = {
     // ============================================
     
     escapeHtml(text) {
+        if (text === null || text === undefined) {
+            return '';
+        }
         const div = document.createElement('div');
-        div.textContent = text;
+        div.textContent = String(text);
         return div.innerHTML;
-    },
-    
-    // Convertir un fichier image en base64
-    async imageToBase64(file) {
-        return new Promise((resolve, reject) => {
-            if (!file) {
-                resolve(null);
-                return;
-            }
-            
-            // Vérifier que c'est bien une image
-            if (!file.type.startsWith('image/')) {
-                reject(new Error('Le fichier doit être une image'));
-                return;
-            }
-            
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target.result);
-            reader.onerror = (e) => reject(e);
-            reader.readAsDataURL(file);
-        });
-    },
-    
-    // Calculer la taille de texte proportionnelle à la surface de l'image
-    calculateTextSizeFromImage(imageElement) {
-        if (!imageElement) {
-            return null;
-        }
-        
-        const getDimensions = () => {
-            const width = imageElement.offsetWidth || imageElement.naturalWidth || 0;
-            const height = imageElement.offsetHeight || imageElement.naturalHeight || 0;
-            
-            if (width === 0 || height === 0) {
-                return null;
-            }
-            
-            // Calculer la surface (largeur × hauteur) en pixels carrés
-            const surface = width * height;
-            
-            // Formule pour calculer la taille de texte proportionnelle
-            const baseSize = 16;
-            const factor = Math.sqrt(surface) / 40;
-            const fontSize = Math.max(12, Math.min(56, baseSize + factor));
-            
-            return Math.round(fontSize);
-        };
-        
-        if (imageElement.complete && imageElement.naturalWidth > 0) {
-            return getDimensions();
-        }
-        
-        return null;
-    },
-    
-    // Appliquer la taille de texte proportionnelle à une image et son texte associé
-    applyProportionalTextSize(imageContainer, textElement) {
-        if (!imageContainer || !textElement) return;
-        
-        const image = imageContainer.querySelector('img');
-        if (!image) return;
-        
-        const applySize = () => {
-            const fontSize = this.calculateTextSizeFromImage(image);
-            if (fontSize) {
-                textElement.style.fontSize = fontSize + 'px';
-                textElement.style.lineHeight = '1.5';
-            }
-        };
-        
-        if (image.complete && image.naturalWidth > 0) {
-            setTimeout(applySize, 10);
-        } else {
-            image.addEventListener('load', () => {
-                setTimeout(applySize, 10);
-            }, { once: true });
-        }
-        
-        if (window.ResizeObserver) {
-            const resizeObserver = new ResizeObserver(() => {
-                applySize();
-            });
-            resizeObserver.observe(image);
-        }
-    },
-    
-    // ============================================
-    // AIDE ET PREMIÈRE VISITE
-    // ============================================
-    
-    checkFirstVisit() {
-        const hasVisited = localStorage.getItem('flashcards_hasVisited');
-        if (!hasVisited) {
-            // Afficher le popup d'aide après un court délai pour que la page soit chargée
-            setTimeout(() => {
-                this.showHelpModal();
-                localStorage.setItem('flashcards_hasVisited', 'true');
-            }, 500);
-        }
-    },
-    
-    showHelpModal() {
-        const helpPages = [
-            {
-                title: 'Qu\'est-ce qu\'une flashcard ?',
-                icon: 'books',
-                content: `
-                    <p style="margin-bottom: 15px;">
-                        Une <strong>flashcard</strong> (carte flash) est un outil d'apprentissage efficace basé sur la répétition espacée. 
-                        C'est une carte avec une <strong>question</strong> sur le recto et la <strong>réponse</strong> sur le verso.
-                    </p>
-                    <div style="background: var(--surface); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                        <p style="margin: 0; font-weight: 600; margin-bottom: 8px;">Exemple :</p>
-                        <p style="margin: 0; margin-bottom: 5px;"><strong>Question :</strong> "Bonjour"</p>
-                        <p style="margin: 0;"><strong>Réponse :</strong> "Hello"</p>
-                    </div>
-                `
-            },
-            {
-                title: 'Comment ça fonctionne ?',
-                icon: 'settings',
-                content: `
-                    <ol style="padding-left: 20px; margin-bottom: 15px; line-height: 1.8;">
-                        <li style="margin-bottom: 12px;"><strong>Créez un deck</strong> : Organisez vos cartes par thème (ex: vocabulaire anglais, histoire, etc.)</li>
-                        <li style="margin-bottom: 12px;"><strong>Ajoutez des cartes</strong> : Pour chaque carte, entrez une question et sa réponse. Vous pouvez aussi ajouter des images !</li>
-                        <li style="margin-bottom: 12px;"><strong>Révisez régulièrement</strong> : L'application vous propose les cartes à réviser selon leur difficulté</li>
-                        <li style="margin-bottom: 12px;"><strong>Évaluez-vous</strong> : Après avoir vu la réponse, indiquez si c'était "Encore", "Bien" ou "Facile"</li>
-                    </ol>
-                `
-            },
-            {
-                title: 'Astuce',
-                icon: 'help',
-                content: `
-                    <p style="margin-bottom: 15px; line-height: 1.8;">
-                        Plus vous répondez correctement, moins la carte vous sera proposée. 
-                        Les cartes difficiles apparaîtront plus souvent jusqu'à ce que vous les maîtrisiez !
-                    </p>
-                    <p style="margin-bottom: 0; line-height: 1.8;">
-                        Vous pouvez créer des cartes avec du texte, des images, ou les deux combinés. 
-                        Les images s'adaptent automatiquement à l'espace disponible.
-                    </p>
-                `
-            }
-        ];
-        
-        const content = `
-            <div class="help-modal-container">
-                <div class="help-pages-wrapper">
-                    ${helpPages.map((page, index) => `
-                        <div class="help-page ${index === 0 ? 'active' : ''}" data-page="${index}">
-                            <h3 class="help-page-title">
-                                <span class="icon-svg" style="display: inline-block; vertical-align: middle; margin-right: 8px;">${Icons.getIcon(page.icon, 24, 'var(--primary-color)')}</span>
-                                ${page.title}
-                            </h3>
-                            <div class="help-page-content" style="line-height: 1.8;">
-                                ${page.content}
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-                <div class="help-navigation">
-                    <button class="help-nav-btn help-nav-prev" id="help-prev-btn" aria-label="Page précédente">
-                        <span class="icon-svg">${Icons.getIcon('arrowLeft', 20, 'white')}</span>
-                    </button>
-                    <div class="help-dots">
-                        ${helpPages.map((_, index) => `
-                            <span class="help-dot ${index === 0 ? 'active' : ''}" data-page="${index}"></span>
-                        `).join('')}
-                    </div>
-                    <button class="help-nav-btn help-nav-next" id="help-next-btn" aria-label="Page suivante">
-                        <span class="icon-svg">${Icons.getIcon('arrowRight', 20, 'white')}</span>
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        this.showModal('Bienvenue ! Guide des flashcards', content);
-        
-        // Initialiser la navigation
-        setTimeout(() => {
-            let currentPage = 0;
-            const totalPages = helpPages.length;
-            const pages = document.querySelectorAll('.help-page');
-            const dots = document.querySelectorAll('.help-dot');
-            const prevBtn = document.getElementById('help-prev-btn');
-            const nextBtn = document.getElementById('help-next-btn');
-            
-            const updatePage = (pageIndex) => {
-                // Mettre à jour les pages
-                pages.forEach((page, index) => {
-                    if (index === pageIndex) {
-                        page.classList.add('active');
-                    } else {
-                        page.classList.remove('active');
-                    }
-                });
-                
-                // Mettre à jour les points
-                dots.forEach((dot, index) => {
-                    if (index === pageIndex) {
-                        dot.classList.add('active');
-                    } else {
-                        dot.classList.remove('active');
-                    }
-                });
-                
-                // Mettre à jour les boutons de navigation
-                if (prevBtn) {
-                    prevBtn.style.opacity = pageIndex === 0 ? '0.3' : '1';
-                    prevBtn.style.cursor = pageIndex === 0 ? 'not-allowed' : 'pointer';
-                }
-                if (nextBtn) {
-                    nextBtn.style.opacity = pageIndex === totalPages - 1 ? '0.3' : '1';
-                    nextBtn.style.cursor = pageIndex === totalPages - 1 ? 'not-allowed' : 'pointer';
-                }
-            };
-            
-            // Navigation avec les boutons
-            if (prevBtn) {
-                prevBtn.addEventListener('click', () => {
-                    if (currentPage > 0) {
-                        currentPage--;
-                        updatePage(currentPage);
-                    }
-                });
-            }
-            
-            if (nextBtn) {
-                nextBtn.addEventListener('click', () => {
-                    if (currentPage < totalPages - 1) {
-                        currentPage++;
-                        updatePage(currentPage);
-                    }
-                });
-            }
-            
-            // Navigation avec les points
-            dots.forEach((dot, index) => {
-                dot.addEventListener('click', () => {
-                    currentPage = index;
-                    updatePage(currentPage);
-                });
-            });
-            
-            // Initialiser l'état
-            updatePage(0);
-        }, 10);
     }
 };
 
-// Initialiser l'application au chargement
+// Initialisation
 document.addEventListener('DOMContentLoaded', () => {
     App.init();
 });

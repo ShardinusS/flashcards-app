@@ -1,13 +1,13 @@
 # ShardCards - Application PWA de Révision
 
-Application web complète de flashcards avec répétition espacée, inspirée d'AnkiApp. Fonctionne comme PWA sur iPhone et autres appareils.
+Application web complète de flashcards avec répétition espacée. Fonctionne comme PWA sur iPhone et autres appareils.
 
 ## 📁 Structure des fichiers
 
 ```
 .
 ├── index.html          # Structure HTML principale
-├── style.css           # Styles (thème blanc/bleu AnkiApp)
+├── style.css           # Styles (thème blanc/bleu)
 ├── script.js           # Logique de l'application
 ├── manifest.json       # Configuration PWA
 ├── service-worker.js   # Service Worker pour cache offline

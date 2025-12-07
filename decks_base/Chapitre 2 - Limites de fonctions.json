@@ -1,0 +1,125 @@
+{
+  "name": "Chapitre 2 - Limites de fonctions",
+  "cards": [
+    {
+      "front": "Limite de f en +∞ égale à +∞",
+      "back": "f(x) aussi grand que voulu quand x assez grand"
+    },
+    {
+      "front": "Limite de f en +∞ égale à -∞",
+      "back": "f(x) aussi petit que voulu quand x assez grand"
+    },
+    {
+      "front": "Limite finie en +∞",
+      "back": "f(x) se rapproche de ℓ quand x assez grand"
+    },
+    {
+      "front": "Asymptote horizontale",
+      "back": "Droite y = k si lim f(x) = k en ±∞"
+    },
+    {
+      "front": "Asymptote verticale",
+      "back": "Droite x = a si lim f(x) = ±∞ en a"
+    },
+    {
+      "front": "Limite en un point pour fonctions usuelles",
+      "back": "Si a dans le domaine, lim f(x) = f(a)"
+    },
+    {
+      "front": "Limite de x^n en +∞",
+      "back": "+∞"
+    },
+    {
+      "front": "Limite de x^n en -∞ si n pair",
+      "back": "+∞"
+    },
+    {
+      "front": "Limite de x^n en -∞ si n impair",
+      "back": "-∞"
+    },
+    {
+      "front": "Limite de √x en +∞",
+      "back": "+∞"
+    },
+    {
+      "front": "Limite de 1/x en ±∞",
+      "back": "0"
+    },
+    {
+      "front": "Limite de 1/x en 0⁺",
+      "back": "+∞"
+    },
+    {
+      "front": "Limite de 1/x en 0⁻",
+      "back": "-∞"
+    },
+    {
+      "front": "Limite somme : f→a et g→b",
+      "back": "f+g → a+b"
+    },
+    {
+      "front": "Limite somme : f→+∞ et g→+∞",
+      "back": "f+g → +∞"
+    },
+    {
+      "front": "Forme indéterminée somme",
+      "back": "f→-∞ et g→+∞"
+    },
+    {
+      "front": "Limite produit : f→a et g→b",
+      "back": "f×g → a×b"
+    },
+    {
+      "front": "Limite produit : f→+∞ et g→+∞",
+      "back": "f×g → +∞"
+    },
+    {
+      "front": "Forme indéterminée produit",
+      "back": "f→0 et g→±∞"
+    },
+    {
+      "front": "Produit par constante k",
+      "back": "Si f→+∞, kf→+∞ si k>0, -∞ si k<0"
+    },
+    {
+      "front": "Limite de u^n",
+      "back": "Si u→a, u^n→a^n. Si u→+∞, u^n→+∞"
+    },
+    {
+      "front": "Limite de 1/u si u→±∞",
+      "back": "1/u → 0"
+    },
+    {
+      "front": "Limite de 1/u si u→0⁺",
+      "back": "+∞"
+    },
+    {
+      "front": "Limite de 1/u si u→0⁻",
+      "back": "-∞"
+    },
+    {
+      "front": "Limite quotient : f→a et g→b≠0",
+      "back": "f/g → a/b"
+    },
+    {
+      "front": "Limite quotient : f→a et g→±∞",
+      "back": "f/g → 0"
+    },
+    {
+      "front": "Exemple (x+1)/(x-3) en 3",
+      "back": "4/0⁻ = -∞, asymptote x=3"
+    },
+    {
+      "front": "Continuité en a",
+      "back": "lim f(x) = f(a)"
+    },
+    {
+      "front": "Exemple asymptote horizontale",
+      "back": "1/x : y=0 asymptote en ±∞"
+    },
+    {
+      "front": "Exemple asymptote verticale",
+      "back": "1/x : x=0 asymptote"
+    }
+  ]
+}
