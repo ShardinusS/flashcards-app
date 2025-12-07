@@ -624,7 +624,7 @@ function isWindows() {
     .catch(() => false);
 }
 
-// Afficher une notification de rappel (notifications push pour mobile)
+// Afficher une notification de rappel (notifications push pour mobile et desktop)
 async function showReviewNotification(deckName = 'Vos flashcards', deckId = null) {
   // Vérifier que le service worker peut afficher des notifications
   if (!self.registration || !self.registration.showNotification) {
@@ -634,21 +634,34 @@ async function showReviewNotification(deckName = 'Vos flashcards', deckId = null
   
   const title = 'Rappel de révision';
   
-  // Options de base pour toutes les plateformes
+  // Options de base pour toutes les plateformes (mobile et desktop)
   const options = {
     body: `Il est temps de réviser : ${deckName}`,
-    tag: `review-reminder-${deckId || 'default'}`,
+    tag: `review-reminder-${deckId || 'default'}-${Date.now()}`, // Tag unique pour éviter les conflits
     requireInteraction: false,
     silent: false,
-    vibrate: [200, 100, 200], // Vibrations pour mobile (toujours ajouté, ignoré si non supporté)
     data: {
       url: './index.html',
       deckId: deckId,
       timestamp: Date.now()
-    },
-    icon: './icon-1024.png',
-    badge: './icon-1024.png',
-    actions: [
+    }
+  };
+  
+  // Ajouter l'icône si disponible
+  try {
+    options.icon = './icon-1024.png';
+    options.badge = './icon-1024.png';
+  } catch (e) {
+    // Ignorer si l'icône n'est pas disponible
+  }
+  
+  // Vibrations pour mobile (ignoré sur desktop, mais toujours ajouté)
+  // Le navigateur ignorera automatiquement si non supporté
+  options.vibrate = [200, 100, 200];
+  
+  // Actions pour les notifications (supportées sur desktop et mobile)
+  try {
+    options.actions = [
       {
         action: 'open',
         title: 'Ouvrir'
@@ -657,28 +670,37 @@ async function showReviewNotification(deckName = 'Vos flashcards', deckId = null
         action: 'dismiss',
         title: 'Plus tard'
       }
-    ]
-  };
+    ];
+  } catch (e) {
+    // Ignorer si les actions ne sont pas supportées
+  }
   
   try {
     // Afficher la notification
     await self.registration.showNotification(title, options);
-    console.log('✅ Notification push affichée:', deckName);
+    console.log('✅ Notification push affichée:', deckName, 'à', new Date().toLocaleTimeString());
   } catch (error) {
     console.error('❌ Erreur lors de l\'affichage de la notification:', error);
+    console.error('Détails de l\'erreur:', error.message, error.stack);
     
     // Essayer avec des options minimales en cas d'erreur
     try {
       const minimalOptions = {
         body: options.body,
         tag: options.tag,
-        data: options.data,
-        icon: options.icon
+        data: options.data
       };
+      
+      // Ajouter l'icône si possible
+      if (options.icon) {
+        minimalOptions.icon = options.icon;
+      }
+      
       await self.registration.showNotification(title, minimalOptions);
       console.log('✅ Notification affichée avec options minimales');
     } catch (fallbackError) {
       console.error('❌ Erreur critique lors de l\'affichage de la notification:', fallbackError);
+      console.error('Détails de l\'erreur fallback:', fallbackError.message, fallbackError.stack);
     }
   }
 }
