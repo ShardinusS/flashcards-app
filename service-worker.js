@@ -187,6 +187,9 @@ async function checkScheduledNotifications() {
     }
   }
   
+  // Note: L'API Notification Scheduling n'est pas encore largement supportée.
+  // On utilise donc Background Sync avec plusieurs enregistrements pour augmenter la fiabilité.
+  
   return new Promise((resolve) => {
     const transaction = db.transaction(['notifications'], 'readwrite');
     const store = transaction.objectStore('notifications');
@@ -215,17 +218,17 @@ async function checkScheduledNotifications() {
         // Afficher toutes les notifications qui sont dues
         if (notificationsToShow.length > 0) {
           console.log(`${notificationsToShow.length} notification(s) a afficher`);
-          for (const notification of notificationsToShow) {
+        for (const notification of notificationsToShow) {
             try {
               // Mettre à jour la notification AVANT de l'afficher pour éviter qu'elle soit trouvée à nouveau
               await scheduleNextNotification(notification);
-              await showReviewNotification(notification.deckName || 'Vos flashcards', notification.deckId);
+          await showReviewNotification(notification.deckName || 'Vos flashcards', notification.deckId);
             } catch (error) {
               console.error('Erreur lors de l\'affichage de la notification:', error);
             }
-          }
-          
-          // Reprogrammer le prochain réveil
+        }
+        
+        // Reprogrammer le prochain réveil
           scheduleNextWakeUp();
         }
         
@@ -259,6 +262,11 @@ async function scheduleNextNotification(notification) {
   notification.lastNotification = now;
   
   store.put(notification);
+  
+  // Note: L'API Notification Scheduling n'est pas encore largement supportée.
+  // Pour les notifications en arrière-plan sur mobile, la meilleure solution serait
+  // d'utiliser les Push Notifications avec un serveur, mais pour l'instant,
+  // on utilise Background Sync qui fonctionne mieux avec plusieurs enregistrements.
   
   // Programmer une synchronisation en arrière-plan pour la prochaine notification
   await scheduleBackgroundSyncForNotification(notification).catch(() => {
@@ -311,36 +319,36 @@ self.addEventListener('message', async (event) => {
         await removeReminderById(reminderId);
       } else if (deckId) {
         console.log('Suppression de tous les rappels pour le deck:', deckId);
-        await removeReminder(deckId);
+    await removeReminder(deckId);
       }
       console.log('Rappel supprime avec succes');
       // Recalculer le prochain réveil après suppression
       await scheduleNextWakeUp();
     } else if (event.data.type === 'UPDATE_REMINDERS') {
-      // Synchroniser tous les rappels (pour compatibilité)
-      const { reminders } = event.data;
+    // Synchroniser tous les rappels (pour compatibilité)
+    const { reminders } = event.data;
       console.log('Mise a jour de tous les rappels:', reminders?.length || 0);
-      if (reminders && Array.isArray(reminders)) {
-        // Supprimer tous les rappels existants
-        await cancelAllReminders();
-        // Ajouter les nouveaux rappels
-        for (const reminder of reminders) {
-          await addReminder(reminder.deckId, reminder.deckName || 'Deck', reminder.intervalMinutes);
-        }
+    if (reminders && Array.isArray(reminders)) {
+      // Supprimer tous les rappels existants
+      await cancelAllReminders();
+      // Ajouter les nouveaux rappels
+      for (const reminder of reminders) {
+        await addReminder(reminder.deckId, reminder.deckName || 'Deck', reminder.intervalMinutes);
+      }
         console.log('Tous les rappels mis a jour');
-      }
+    }
     } else if (event.data.type === 'GET_ALL_REMINDERS') {
-      const reminders = await getAllReminders();
+    const reminders = await getAllReminders();
       console.log('Recuperation de tous les rappels:', reminders.length);
-      if (event.ports && event.ports[0]) {
-        event.ports[0].postMessage({ reminders });
-      } else {
-        // Fallback si MessageChannel n'est pas utilisé
-        event.source.postMessage({ type: 'ALL_REMINDERS', reminders }, event.origin);
-      }
+    if (event.ports && event.ports[0]) {
+      event.ports[0].postMessage({ reminders });
+    } else {
+      // Fallback si MessageChannel n'est pas utilisé
+      event.source.postMessage({ type: 'ALL_REMINDERS', reminders }, event.origin);
+    }
     } else if (event.data.type === 'CANCEL_ALL_REMINDERS') {
       console.log('Annulation de tous les rappels');
-      await cancelAllReminders();
+    await cancelAllReminders();
       console.log('Tous les rappels annules');
     }
   } catch (error) {
@@ -386,16 +394,16 @@ async function addReminder(deckId, deckName, intervalMinutes, reminderId = null)
           return;
         }
         
-        const now = Date.now();
-        const nextNotification = now + (intervalMinutes * 60 * 1000);
-        
+      const now = Date.now();
+      const nextNotification = now + (intervalMinutes * 60 * 1000);
+      
         // Construire l'objet notification
-        const notification = {
-          deckId: deckId,
-          deckName: deckName,
-          intervalMinutes: intervalMinutes,
-          nextNotification: nextNotification,
-          lastNotification: null,
+      const notification = {
+        deckId: deckId,
+        deckName: deckName,
+        intervalMinutes: intervalMinutes,
+        nextNotification: nextNotification,
+        lastNotification: null,
           createdAt: now
         };
         
@@ -404,9 +412,9 @@ async function addReminder(deckId, deckName, intervalMinutes, reminderId = null)
           notification.id = reminderId;
         }
         // Sinon, laisser autoIncrement générer l'ID automatiquement
-        
-        const putRequest = store.put(notification);
-        putRequest.onsuccess = async () => {
+      
+      const putRequest = store.put(notification);
+      putRequest.onsuccess = async () => {
           // Récupérer l'ID généré si nécessaire
           const finalId = notification.id || putRequest.result;
           
@@ -414,11 +422,11 @@ async function addReminder(deckId, deckName, intervalMinutes, reminderId = null)
           await scheduleBackgroundSyncForNotification(notification).catch(() => {
             // Ignorer les erreurs de permission (normal sur desktop)
           });
-          // Reprogrammer le prochain réveil pour inclure cette nouvelle notification
-          await scheduleNextWakeUp();
+        // Reprogrammer le prochain réveil pour inclure cette nouvelle notification
+        await scheduleNextWakeUp();
           resolve({ id: finalId, isDuplicate: false });
-        };
-        putRequest.onerror = () => reject(putRequest.error);
+      };
+      putRequest.onerror = () => reject(putRequest.error);
       }
     };
     request.onerror = () => reject(request.error);
@@ -433,14 +441,34 @@ async function scheduleBackgroundSyncForNotification(notification) {
   
   try {
     const delay = notification.nextNotification - Date.now();
+    const now = Date.now();
     
-    // Si la notification est dans moins de 5 minutes, programmer immédiatement
-    if (delay > 0 && delay < 5 * 60 * 1000) {
-      await self.registration.sync.register(`notification-${notification.deckId}-${Date.now()}`);
-    } else if (delay > 0) {
-      // Pour les notifications futures, programmer une sync périodique
-      // Le système vérifiera périodiquement les notifications
-      await self.registration.sync.register('check-notifications');
+    // Créer un tag unique pour cette notification spécifique
+    const syncTag = `notification-${notification.deckId}-${notification.nextNotification}`;
+    
+    // Toujours enregistrer une sync pour cette notification spécifique
+    if (delay > 0) {
+      await self.registration.sync.register(syncTag).catch(() => {
+        // Ignorer si déjà enregistré
+      });
+    }
+    
+    // Enregistrer aussi une sync générale pour vérifier périodiquement
+    await self.registration.sync.register('check-notifications').catch(() => {
+      // Ignorer si déjà enregistré
+    });
+    
+    // Pour les notifications dans les prochaines heures, enregistrer plusieurs syncs
+    // pour augmenter les chances qu'elles soient déclenchées
+    if (delay > 0 && delay < 6 * 60 * 60 * 1000) { // Dans les 6 prochaines heures
+      // Enregistrer une sync supplémentaire 1 minute avant la notification
+      const earlySyncTag = `notification-early-${notification.deckId}-${notification.nextNotification}`;
+      const earlyDelay = Math.max(0, delay - 60000); // 1 minute avant
+      if (earlyDelay > 0) {
+        // Note: Background Sync ne permet pas de programmer avec un délai précis,
+        // mais on peut enregistrer plusieurs syncs pour augmenter les chances
+        await self.registration.sync.register(earlySyncTag).catch(() => {});
+      }
     }
   } catch (error) {
     // Ignorer silencieusement les erreurs de permission (normales sur desktop)
@@ -525,7 +553,7 @@ async function removeReminder(deckId) {
         } else {
           // Aucune entrée trouvée, mais c'est OK
           console.log(`Aucun rappel trouve pour deckId ${deckId}`);
-          resolve();
+        resolve();
         }
       }
     };
@@ -589,10 +617,25 @@ function startPeriodicCheck() {
   // Programmer un réveil pour vérifier les notifications même quand l'app est fermée
   scheduleNextWakeUp();
   
-  // Enregistrer une sync périodique pour s'assurer que les notifications sont vérifiées
+  // Enregistrer plusieurs syncs pour augmenter les chances que les notifications soient vérifiées
   if ('sync' in self.registration) {
+    // Sync principale pour vérifier les notifications
     self.registration.sync.register('check-notifications').catch(() => {
       // Ignorer si déjà enregistré
+    });
+    
+    // Syncs supplémentaires pour augmenter la fiabilité
+    // Le navigateur peut ignorer certaines syncs, donc on en enregistre plusieurs
+    self.registration.sync.register('check-notifications-backup-1').catch(() => {});
+    self.registration.sync.register('check-notifications-backup-2').catch(() => {});
+  }
+  
+  // Enregistrer Periodic Background Sync si disponible (Android Chrome)
+  if ('periodicSync' in self.registration) {
+    self.registration.periodicSync.register('check-notifications-periodic', {
+      minInterval: 60 * 60 * 1000 // Minimum 1 heure entre les syncs
+    }).catch(() => {
+      // Ignorer si déjà enregistré ou non disponible
     });
   }
   
@@ -641,8 +684,8 @@ async function scheduleNextWakeUp() {
         // Programmer une synchronisation en arrière-plan pour la prochaine notification
         if ('sync' in self.registration) {
           try {
-            // Programmer une sync pour chaque notification à venir (max 5 pour éviter la surcharge)
-            const notificationsToSync = upcomingNotifications.slice(0, 5);
+            // Programmer une sync pour chaque notification à venir (max 10 pour augmenter la fiabilité)
+            const notificationsToSync = upcomingNotifications.slice(0, 10);
             for (const notif of notificationsToSync) {
               const syncDelay = notif.nextNotification - now;
               if (syncDelay > 0 && syncDelay < 24 * 60 * 60 * 1000) {
@@ -651,13 +694,21 @@ async function scheduleNextWakeUp() {
                 await self.registration.sync.register(syncTag).catch(() => {
                   // Ignorer si déjà enregistré
                 });
+                
+                // Pour les notifications dans les prochaines heures, enregistrer aussi une sync de backup
+                if (syncDelay < 6 * 60 * 60 * 1000) {
+                  const backupTag = `notification-backup-${notif.deckId}-${notif.nextNotification}`;
+                  await self.registration.sync.register(backupTag).catch(() => {});
+                }
               }
             }
             
-            // Programmer aussi une sync générale pour vérifier périodiquement
+            // Programmer aussi des syncs générales pour vérifier périodiquement
             await self.registration.sync.register('check-notifications').catch(() => {
               // Ignorer si déjà enregistré
             });
+            await self.registration.sync.register('check-notifications-backup-1').catch(() => {});
+            await self.registration.sync.register('check-notifications-backup-2').catch(() => {});
           } catch (error) {
             console.log('Erreur lors de la programmation de la sync:', error);
           }
@@ -697,15 +748,23 @@ self.addEventListener('activate', async (event) => {
 
 // Écouter l'événement de réveil du service worker (Background Sync)
 self.addEventListener('sync', (event) => {
-  if (event.tag === 'check-notifications' || event.tag.startsWith('notification-')) {
+  // Gérer toutes les syncs liées aux notifications
+  if (event.tag === 'check-notifications' || 
+      event.tag.startsWith('notification-') || 
+      event.tag.startsWith('check-notifications-backup-')) {
     event.waitUntil(
       checkScheduledNotifications().then(() => {
         scheduleNextWakeUp();
-        // Reprogrammer la prochaine sync
+        // Reprogrammer les syncs pour continuer à vérifier
         if ('sync' in self.registration) {
+          // Reprogrammer la sync principale
           self.registration.sync.register('check-notifications').catch(() => {
             // Ignorer les erreurs si la sync est déjà enregistrée
           });
+          
+          // Reprogrammer aussi les syncs de backup
+          self.registration.sync.register('check-notifications-backup-1').catch(() => {});
+          self.registration.sync.register('check-notifications-backup-2').catch(() => {});
         }
       })
     );

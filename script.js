@@ -3131,10 +3131,14 @@ const App = {
                     }
                 }
                 
-                // Enregistrer une synchronisation en arrière-plan immédiate
+                // Enregistrer plusieurs synchronisations en arrière-plan pour augmenter la fiabilité
                 if ('sync' in registration) {
                     try {
+                        // Sync principale
                         await registration.sync.register('check-notifications');
+                        // Syncs de backup pour augmenter les chances
+                        await registration.sync.register('check-notifications-backup-1').catch(() => {});
+                        await registration.sync.register('check-notifications-backup-2').catch(() => {});
                     } catch (error) {
                         // Ignorer les erreurs si l'API n'est pas disponible
                         console.log('Background Sync non disponible:', error);
@@ -3142,15 +3146,19 @@ const App = {
                 }
                 
                 // Vérifier périodiquement si on peut reprogrammer les syncs
+                // Cela aide à maintenir les syncs actives même si le navigateur les ignore parfois
                 setInterval(async () => {
                     if (registration.sync) {
                         try {
-                            await registration.sync.register('check-notifications');
+                            // Réenregistrer toutes les syncs pour maintenir leur activation
+                            await registration.sync.register('check-notifications').catch(() => {});
+                            await registration.sync.register('check-notifications-backup-1').catch(() => {});
+                            await registration.sync.register('check-notifications-backup-2').catch(() => {});
                         } catch (error) {
                             // Ignorer les erreurs
                         }
                     }
-                }, 30 * 60 * 1000); // Toutes les 30 minutes
+                }, 15 * 60 * 1000); // Toutes les 15 minutes (plus fréquent pour maintenir les syncs actives)
                 
             } catch (err) {
                 // Ignorer l'erreur si on est en file:// (développement local)
