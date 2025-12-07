@@ -163,6 +163,11 @@ function initDB() {
 
 // Vérifier et afficher les notifications programmées
 async function checkScheduledNotifications() {
+  // Éviter les vérifications simultanées
+  if (isCheckingNotifications) {
+    return 0;
+  }
+  
   if (!db) {
     await initDB();
   }
@@ -172,13 +177,22 @@ async function checkScheduledNotifications() {
     return 0;
   }
   
+  isCheckingNotifications = true;
+  
+  // Nettoyer le cache des notifications récentes (plus de 2 minutes)
+  const now = Date.now();
+  for (const [key, timestamp] of recentNotifications.entries()) {
+    if (now - timestamp > 120000) { // 2 minutes
+      recentNotifications.delete(key);
+    }
+  }
+  
   return new Promise((resolve) => {
-    const now = Date.now();
     const transaction = db.transaction(['notifications'], 'readwrite');
     const store = transaction.objectStore('notifications');
     const index = store.index('nextNotification');
-    // Vérifier les notifications qui sont dues (avec une marge de 5 minutes pour éviter les problèmes de timing)
-    const range = IDBKeyRange.upperBound(now + (5 * 60 * 1000));
+    // Vérifier les notifications qui sont dues (sans marge pour éviter les doublons)
+    const range = IDBKeyRange.upperBound(now);
     
     const request = index.openCursor(range);
     const notificationsToShow = [];
@@ -187,10 +201,14 @@ async function checkScheduledNotifications() {
       const cursor = event.target.result;
       if (cursor) {
         const notification = cursor.value;
-        // Vérifier que la notification est vraiment due
-        if (notification.nextNotification <= now) {
+        // Vérifier que la notification est vraiment due ET qu'elle n'a pas été affichée récemment
+        const notificationKey = `${notification.deckId}_${notification.nextNotification}`;
+        const wasShownRecently = recentNotifications.has(notificationKey);
+        
+        if (notification.nextNotification <= now && !wasShownRecently) {
           notificationsToShow.push(notification);
-          console.log('Notification due trouvee:', notification.deckName, new Date(notification.nextNotification).toLocaleString());
+          // Marquer immédiatement comme affichée pour éviter les doublons
+          recentNotifications.set(notificationKey, now);
         }
         cursor.continue();
       } else {
@@ -199,8 +217,9 @@ async function checkScheduledNotifications() {
           console.log(`${notificationsToShow.length} notification(s) a afficher`);
           for (const notification of notificationsToShow) {
             try {
-              await showReviewNotification(notification.deckName || 'Vos flashcards', notification.deckId);
+              // Mettre à jour la notification AVANT de l'afficher pour éviter qu'elle soit trouvée à nouveau
               await scheduleNextNotification(notification);
+              await showReviewNotification(notification.deckName || 'Vos flashcards', notification.deckId);
             } catch (error) {
               console.error('Erreur lors de l\'affichage de la notification:', error);
             }
@@ -210,12 +229,14 @@ async function checkScheduledNotifications() {
           scheduleNextWakeUp();
         }
         
+        isCheckingNotifications = false;
         resolve(notificationsToShow.length);
       }
     };
     
     request.onerror = (error) => {
       console.error('Erreur lors de la verification des notifications:', error);
+      isCheckingNotifications = false;
       resolve(0);
     };
   });
@@ -240,15 +261,12 @@ async function scheduleNextNotification(notification) {
   store.put(notification);
   
   // Programmer une synchronisation en arrière-plan pour la prochaine notification
-  await scheduleBackgroundSyncForNotification(notification);
+  await scheduleBackgroundSyncForNotification(notification).catch(() => {
+    // Ignorer les erreurs de permission (normal sur desktop)
+  });
   
-  // Programmer aussi une vérification locale (pour quand le service worker est actif)
-  const delay = nextNotification - now;
-  if (delay > 0 && delay < 2147483647) { // Max pour setTimeout
-    setTimeout(() => {
-      checkScheduledNotifications();
-    }, delay);
-  }
+  // Ne plus programmer de setTimeout ici pour éviter les doublons
+  // La vérification périodique s'en chargera
 }
 
 // Écouter les messages du client
@@ -354,7 +372,9 @@ async function addReminder(deckId, deckName, intervalMinutes) {
       const putRequest = store.put(notification);
       putRequest.onsuccess = async () => {
         // Programmer une synchronisation en arrière-plan pour cette notification
-        await scheduleBackgroundSyncForNotification(notification);
+        await scheduleBackgroundSyncForNotification(notification).catch(() => {
+          // Ignorer les erreurs de permission (normal sur desktop)
+        });
         // Reprogrammer le prochain réveil pour inclure cette nouvelle notification
         await scheduleNextWakeUp();
         resolve();
@@ -383,7 +403,11 @@ async function scheduleBackgroundSyncForNotification(notification) {
       await self.registration.sync.register('check-notifications');
     }
   } catch (error) {
-    console.log('Erreur lors de la programmation de la sync:', error);
+    // Ignorer silencieusement les erreurs de permission (normales sur desktop)
+    // Background Sync nécessite une interaction utilisateur et n'est pas toujours disponible
+    if (error.name !== 'NotAllowedError' && error.name !== 'NotSupportedError') {
+      console.error('Erreur lors de la programmation de la sync:', error);
+    }
   }
 }
 
@@ -449,6 +473,8 @@ async function cancelAllReminders() {
 // Vérifier périodiquement les notifications
 let checkInterval = null;
 let wakeUpTimeout = null;
+let isCheckingNotifications = false; // Verrouillage pour éviter les vérifications simultanées
+const recentNotifications = new Map(); // Cache des notifications récemment affichées
 
 function startPeriodicCheck() {
   // Vérifier toutes les minutes quand le service worker est actif
@@ -459,10 +485,10 @@ function startPeriodicCheck() {
   // Vérifier immédiatement
   checkScheduledNotifications();
   
-  // Vérifier périodiquement quand le service worker est actif (toutes les minutes pour être plus réactif)
+  // Vérifier périodiquement quand le service worker est actif (toutes les 2 minutes pour éviter le spam)
   checkInterval = setInterval(() => {
     checkScheduledNotifications();
-  }, 60000); // Toutes les minutes pour être plus réactif
+  }, 120000); // Toutes les 2 minutes pour éviter le spam
   
   // Programmer un réveil pour vérifier les notifications même quand l'app est fermée
   scheduleNextWakeUp();
@@ -682,7 +708,9 @@ async function showReviewNotification(deckName = 'Vos flashcards', deckId = null
   }
   
   try {
-    // Afficher la notification
+    // Afficher la notification avec un tag unique pour éviter les doublons
+    // Le navigateur dédupliquera automatiquement les notifications avec le même tag
+    options.tag = `review-${deckId}-${Date.now()}`;
     await self.registration.showNotification(title, options);
     console.log('Notification push affichee:', deckName, 'a', new Date().toLocaleTimeString());
   } catch (error) {
