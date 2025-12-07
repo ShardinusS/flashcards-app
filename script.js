@@ -38,23 +38,24 @@ const Icons = {
 // ============================================
 
 // Configuration Firebase
-// Project ID: flashcards-app-10e84
-const firebaseConfig = {
-  apiKey: "AIzaSyASyMmz55F0eZoIRoc0HLTOEXAkcZjhmcQ",
-  authDomain: "flashcards-app-10e84.firebaseapp.com",
-  projectId: "flashcards-app-10e84",
-  storageBucket: "flashcards-app-10e84.firebasestorage.app",
-  messagingSenderId: "63932319446",
-  appId: "1:63932319446:web:b1d531524b7a90fda8eb77",
-  measurementId: "G-N6FD9M0TMW"
-};
+// ⚠️ La configuration est chargée depuis config.js (exclu du repo)
+// Vérifiez que config.js existe et contient les bonnes valeurs
+// Si config.js n'existe pas, copiez config.example.js en config.js et remplissez les valeurs
 
-// Clé publique VAPID Firebase
-const FCM_VAPID_KEY = "BM6yAnLEv2RSbcjtCc-Htegl9CzVge-kFNjzUCUzmJk5NRvhqDcJSXFq9LPhwjpiXLrQXOoR2PHJBJA1PKts7oY";
+// Les variables firebaseConfig et FCM_VAPID_KEY sont définies dans config.js
+// Vérification que la config est bien chargée
+if (typeof firebaseConfig === 'undefined') {
+  console.error('⚠️ ERREUR: config.js n\'est pas chargé ou firebaseConfig n\'est pas défini');
+  console.error('📝 Solution: Copiez config.example.js en config.js et remplissez avec vos valeurs Firebase');
+}
+if (typeof FCM_VAPID_KEY === 'undefined') {
+  console.error('⚠️ ERREUR: config.js n\'est pas chargé ou FCM_VAPID_KEY n\'est pas défini');
+  console.error('📝 Solution: Copiez config.example.js en config.js et remplissez avec votre clé VAPID');
+}
 
 // Initialiser Firebase si disponible
 let messaging = null;
-if (typeof firebase !== 'undefined') {
+if (typeof firebase !== 'undefined' && typeof firebaseConfig !== 'undefined') {
   try {
     firebase.initializeApp(firebaseConfig);
     messaging = firebase.messaging();
@@ -62,6 +63,8 @@ if (typeof firebase !== 'undefined') {
   } catch (error) {
     console.error('Erreur lors de l\'initialisation de Firebase:', error);
   }
+} else if (typeof firebase !== 'undefined' && typeof firebaseConfig === 'undefined') {
+  console.warn('⚠️ Firebase SDK est disponible mais firebaseConfig n\'est pas défini. Vérifiez que config.js est chargé.');
 }
 
 // ============================================
@@ -3136,10 +3139,18 @@ const App = {
                 }
             }
             
+            // Vérifier que la clé VAPID est disponible
+            const vapidKey = FCM_VAPID_KEY || localStorage.getItem('fcm_vapid_key');
+            if (!vapidKey) {
+                console.error('⚠️ ERREUR: FCM_VAPID_KEY n\'est pas défini dans config.js');
+                console.error('📝 Solution: Vérifiez que config.js contient FCM_VAPID_KEY ou copiez config.example.js en config.js');
+                return;
+            }
+            
             try {
                 // Obtenir le token FCM (la permission est déjà accordée)
                 const token = await messaging.getToken({
-                    vapidKey: FCM_VAPID_KEY || localStorage.getItem('fcm_vapid_key')
+                    vapidKey: vapidKey
                 });
                 
                 if (token) {
@@ -3181,9 +3192,16 @@ const App = {
             return null;
         }
         
+        // Vérifier que la clé VAPID est disponible
+        const vapidKey = FCM_VAPID_KEY || localStorage.getItem('fcm_vapid_key');
+        if (!vapidKey) {
+            console.error('⚠️ ERREUR: FCM_VAPID_KEY n\'est pas défini dans config.js');
+            return null;
+        }
+        
         try {
             const token = await messaging.getToken({
-                vapidKey: FCM_VAPID_KEY || localStorage.getItem('fcm_vapid_key')
+                vapidKey: vapidKey
             });
             return token;
         } catch (error) {

@@ -1,6 +1,10 @@
 # Dossier de fichiers qui ne doivent pas être dans le repo
 no-repo/
 
+# Fichiers de configuration avec secrets (API keys, tokens, etc.)
+config.js
+config-sw.js
+
 # Fichiers système
 .DS_Store
 Thumbs.db

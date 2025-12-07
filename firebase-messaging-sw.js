@@ -4,17 +4,29 @@
 importScripts("https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js");
 importScripts("https://www.gstatic.com/firebasejs/9.6.10/firebase-messaging.js");
 
-// Configuration Firebase
-// Project ID: flashcards-app-10e84
-const firebaseConfig = {
-  apiKey: "AIzaSyASyMmz55F0eZoIRoc0HLTOEXAkcZjhmcQ",
-  authDomain: "flashcards-app-10e84.firebaseapp.com",
-  projectId: "flashcards-app-10e84",
-  storageBucket: "flashcards-app-10e84.firebasestorage.app",
-  messagingSenderId: "63932319446",
-  appId: "1:63932319446:web:b1d531524b7a90fda8eb77",
-  measurementId: "G-N6FD9M0TMW"
-};
+// ⚠️ La configuration est chargée depuis config-sw.js (exclu du repo)
+// Vérifiez que config-sw.js existe et contient les bonnes valeurs
+// Si config-sw.js n'existe pas, copiez config-sw.example.js en config-sw.js et remplissez les valeurs
+
+// Configuration Firebase (chargée depuis config-sw.js)
+// Utiliser try-catch pour gérer le cas où config-sw.js n'existe pas
+try {
+  importScripts("./config-sw.js");
+} catch (error) {
+  console.error('⚠️ ERREUR: Impossible de charger config-sw.js');
+  console.error('📝 Solution: Copiez config-sw.example.js en config-sw.js et remplissez avec vos valeurs Firebase');
+  console.error('Erreur:', error);
+  // Ne pas initialiser Firebase si la config n'est pas disponible
+  throw new Error('Firebase configuration is missing. Please create config-sw.js from config-sw.example.js');
+}
+
+// Vérifier que la config est bien chargée
+if (typeof firebaseConfig === 'undefined') {
+  console.error('⚠️ ERREUR: config-sw.js est chargé mais firebaseConfig n\'est pas défini');
+  console.error('📝 Solution: Vérifiez que config-sw.js contient bien la variable firebaseConfig');
+  // Ne pas initialiser Firebase si la config n'est pas disponible
+  throw new Error('Firebase configuration is missing. Please check config-sw.js contains firebaseConfig');
+}
 
 // Initialiser Firebase
 firebase.initializeApp(firebaseConfig);
