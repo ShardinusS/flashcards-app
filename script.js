@@ -2791,14 +2791,6 @@ const App = {
                     <span>Ajouter le rappel</span>
                 </button>
                 
-                <div style="margin-top: 20px; padding: 15px; background: var(--surface); border-radius: 12px; border: 2px solid var(--border);">
-                    <h4 style="margin: 0 0 10px 0; font-size: 16px; color: var(--text-primary);">Tester les notifications</h4>
-                    <p style="margin: 0 0 15px 0; font-size: 14px; color: var(--text-secondary);">Cliquez sur le bouton ci-dessous pour tester si les notifications fonctionnent sur votre appareil.</p>
-                    <button type="button" id="test-notification-btn" class="btn btn-primary" style="width: 100%;">
-                        <span>🔔 Tester une notification maintenant</span>
-                    </button>
-                </div>
-                
                 <div class="reminders-section">
                     <div class="reminders-section-header">
                         <h3 class="reminders-title">
@@ -2830,17 +2822,6 @@ const App = {
         this.showModalWithContent('Rappels de révision', content);
         
         requestAnimationFrame(() => {
-            // Event listener pour tester les notifications
-            const testNotificationBtn = document.getElementById('test-notification-btn');
-            if (testNotificationBtn) {
-                testNotificationBtn.addEventListener('click', async () => {
-                    await this.testNotificationNow();
-                });
-                console.log('Bouton de test de notification attache');
-            } else {
-                console.warn('Bouton de test de notification non trouve');
-            }
-            
             // Gérer l'affichage du champ personnalisé
             const intervalSelect = document.getElementById('reminder-interval-select');
             const customIntervalContainer = document.getElementById('custom-interval-container');
@@ -3127,67 +3108,6 @@ const App = {
         }
     },
     
-    async testNotificationNow() {
-        // Tester l'affichage d'une notification immédiatement
-        console.log('Test de notification...');
-        
-        if (!('Notification' in window)) {
-            alert('Les notifications ne sont pas supportées par votre navigateur.');
-            return;
-        }
-        
-        if (Notification.permission !== 'granted') {
-            alert('Les notifications ne sont pas autorisées. Veuillez autoriser les notifications dans les paramètres de votre navigateur.');
-            return;
-        }
-        
-        if (!('serviceWorker' in navigator)) {
-            alert('Le service worker n\'est pas disponible. Les notifications ne peuvent pas fonctionner.');
-            return;
-        }
-        
-        try {
-            const registration = await navigator.serviceWorker.ready;
-            
-            if (!registration.showNotification) {
-                alert('Le service worker ne peut pas afficher de notifications.');
-                return;
-            }
-            
-            // Afficher une notification de test
-            await registration.showNotification('Test de notification ShardCards', {
-                body: 'Si vous voyez cette notification, les rappels fonctionneront correctement !',
-                icon: './icon-1024.png',
-                badge: './icon-1024.png',
-                tag: 'test-notification-' + Date.now(),
-                requireInteraction: false,
-                silent: false,
-                vibrate: [200, 100, 200],
-                data: {
-                    url: './index.html',
-                    test: true
-                },
-                actions: [
-                    {
-                        action: 'test-ok',
-                        title: 'OK'
-                    }
-                ]
-            });
-            
-            console.log('Notification de test envoyee avec succes !');
-            
-            // Attendre un peu avant d'afficher l'alerte pour laisser la notification s'afficher
-            setTimeout(() => {
-                alert('Notification de test envoyee !\n\nSi vous ne la voyez pas :\n1. Verifiez les parametres de notifications de votre navigateur\n2. Verifiez que les notifications ne sont pas en mode "Ne pas deranger"\n3. Regardez dans la barre de notifications de votre systeme');
-            }, 500);
-            
-        } catch (error) {
-            console.error('Erreur lors du test de notification:', error);
-            console.error('Details:', error.stack);
-            alert('Erreur lors du test de notification :\n\n' + error.message + '\n\nVerifiez la console pour plus de details (F12 > Console).');
-        }
-    },
     
     async registerServiceWorker() {
         if ('serviceWorker' in navigator) {
