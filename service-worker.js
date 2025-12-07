@@ -298,6 +298,8 @@ self.addEventListener('message', async (event) => {
       console.log('Suppression d\'un rappel:', deckId);
       await removeReminder(deckId);
       console.log('Rappel supprime avec succes');
+      // Recalculer le prochain réveil après suppression
+      await scheduleNextWakeUp();
     } else if (event.data.type === 'UPDATE_REMINDERS') {
       // Synchroniser tous les rappels (pour compatibilité)
       const { reminders } = event.data;
@@ -424,16 +426,45 @@ async function removeReminder(deckId) {
     const store = transaction.objectStore('notifications');
     const index = store.index('deckId');
     
-    const request = index.get(deckId);
-    request.onsuccess = () => {
-      if (request.result) {
-        const deleteRequest = store.delete(request.result.id);
-        deleteRequest.onsuccess = () => resolve();
-        deleteRequest.onerror = () => reject(deleteRequest.error);
+    // Utiliser un curseur pour supprimer TOUTES les entrées avec ce deckId
+    // (au cas où il y en aurait plusieurs par erreur)
+    const request = index.openCursor(IDBKeyRange.only(deckId));
+    const idsToDelete = [];
+    
+    request.onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        idsToDelete.push(cursor.value.id);
+        cursor.continue();
       } else {
-        resolve();
+        // Supprimer toutes les entrées trouvées
+        if (idsToDelete.length > 0) {
+          let deletedCount = 0;
+          idsToDelete.forEach(id => {
+            const deleteRequest = store.delete(id);
+            deleteRequest.onsuccess = () => {
+              deletedCount++;
+              if (deletedCount === idsToDelete.length) {
+                // Nettoyer aussi le cache des notifications récentes pour ce deckId
+                for (const [key] of recentNotifications.entries()) {
+                  if (key.startsWith(`${deckId}_`)) {
+                    recentNotifications.delete(key);
+                  }
+                }
+                console.log(`Rappel supprime: ${idsToDelete.length} entree(s) pour deckId ${deckId}`);
+                resolve();
+              }
+            };
+            deleteRequest.onerror = () => reject(deleteRequest.error);
+          });
+        } else {
+          // Aucune entrée trouvée, mais c'est OK
+          console.log(`Aucun rappel trouve pour deckId ${deckId}`);
+          resolve();
+        }
       }
     };
+    
     request.onerror = () => reject(request.error);
   });
 }

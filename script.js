@@ -2923,19 +2923,22 @@ const App = {
             document.querySelectorAll('.btn-remove-reminder').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const index = parseInt(e.target.getAttribute('data-reminder-index'));
+                    // Récupérer le rappel AVANT de le supprimer du tableau
+                    const removedReminder = savedReminders[index];
                     savedReminders.splice(index, 1);
                     localStorage.setItem('flashcards_reminders', JSON.stringify(savedReminders));
                     
                     // Envoyer un message au service worker pour supprimer le rappel
-                    if ('serviceWorker' in navigator) {
+                    if ('serviceWorker' in navigator && removedReminder) {
                         navigator.serviceWorker.ready.then(registration => {
-                            const removedReminder = savedReminders[index];
-                            if (removedReminder && registration.active) {
+                            if (registration.active) {
                                 registration.active.postMessage({
                                     type: 'REMOVE_REMINDER',
                                     deckId: removedReminder.deckId
                                 });
                             }
+                        }).catch(err => {
+                            console.error('Erreur lors de la suppression du rappel:', err);
                         });
                     }
                     
