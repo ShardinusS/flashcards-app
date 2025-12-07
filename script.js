@@ -1434,6 +1434,12 @@ const App = {
             updatedFrontElement.style.opacity = '';
             updatedFrontElement.style.transform = '';
             updatedFrontElement.style.transition = '';
+            // Ajouter la classe has-image si une image est présente
+            if (hasFrontImage) {
+                updatedFrontElement.classList.add('has-image');
+            } else {
+                updatedFrontElement.classList.remove('has-image');
+            }
         }
         
         if (updatedBackElement) {
@@ -1445,6 +1451,12 @@ const App = {
             updatedBackElement.style.opacity = '';
             updatedBackElement.style.transform = '';
             updatedBackElement.style.transition = '';
+            // Ajouter la classe has-image si une image est présente
+            if (hasBackImage) {
+                updatedBackElement.classList.add('has-image');
+            } else {
+                updatedBackElement.classList.remove('has-image');
+            }
         }
         
         // Ajuster la taille du texte en fonction de la taille des images après le rendu
@@ -1479,6 +1491,54 @@ const App = {
         }
     },
     
+    adjustTextSizeForImages() {
+        // Ajuster la taille du texte pour les cartes avec images
+        const frontElement = document.getElementById('card-front');
+        const backElement = document.getElementById('card-back');
+        
+        [frontElement, backElement].forEach(cardSide => {
+            if (!cardSide || cardSide.classList.contains('hidden')) return;
+            
+            const imageContainer = cardSide.querySelector('.review-image-container');
+            const image = imageContainer ? imageContainer.querySelector('.review-image') : null;
+            const textElement = cardSide.querySelector('.review-text-with-image');
+            
+            if (image && textElement) {
+                // Attendre que l'image soit chargée
+                if (image.complete) {
+                    this.adjustTextSizeForImage(image, textElement);
+                } else {
+                    image.addEventListener('load', () => {
+                        this.adjustTextSizeForImage(image, textElement);
+                    });
+                }
+            }
+        });
+    },
+    
+    adjustTextSizeForImage(image, textElement) {
+        // Obtenir la largeur réelle de l'image affichée
+        const imageWidth = image.offsetWidth || image.naturalWidth;
+        
+        if (!imageWidth || imageWidth === 0) return;
+        
+        // Calculer la taille de police proportionnelle (environ 6-10% de la largeur de l'image)
+        // Avec des limites min/max pour la lisibilité (16px min, 32px max)
+        // Pour une image de 300px de large, cela donne environ 18-30px
+        const baseSize = Math.max(16, Math.min(32, imageWidth * 0.08));
+        
+        // Appliquer la taille calculée
+        textElement.style.fontSize = `${baseSize}px`;
+        
+        // S'assurer que le texte est centré et aligné avec l'image
+        textElement.style.textAlign = 'center';
+        textElement.style.width = '100%';
+        textElement.style.maxWidth = `${Math.min(imageWidth, window.innerWidth - 60)}px`;
+        textElement.style.marginLeft = 'auto';
+        textElement.style.marginRight = 'auto';
+        textElement.style.display = 'block';
+    },
+    
     revealAnswer() {
         if (!this.isRevealed) {
             this.revealCard();
@@ -1510,6 +1570,8 @@ const App = {
                     backElement.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
                     backElement.style.opacity = '1';
                     backElement.style.transform = 'scale(1)';
+                    // Ajuster la taille du texte après l'affichage du verso
+                    this.adjustTextSizeForImages();
                 }, 10);
             });
         }
@@ -2879,6 +2941,8 @@ const App = {
         }
         
         if (Notification.permission === 'granted') {
+            // Vérifier aussi la permission Periodic Background Sync si disponible
+            await this.requestPeriodicSyncPermission();
             return Promise.resolve();
         }
         
@@ -2891,6 +2955,8 @@ const App = {
         try {
             const permission = await Notification.requestPermission();
             if (permission === 'granted') {
+                // Demander aussi la permission Periodic Background Sync
+                await this.requestPeriodicSyncPermission();
                 return Promise.resolve();
             } else {
                 alert('Les notifications sont nécessaires pour recevoir les rappels de révision. Veuillez les autoriser.');
@@ -2902,28 +2968,86 @@ const App = {
         }
     },
     
-    registerServiceWorker() {
+    async requestPeriodicSyncPermission() {
+        // Demander la permission Periodic Background Sync si disponible (Android Chrome)
+        if ('serviceWorker' in navigator && 'periodicSync' in navigator.serviceWorker) {
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                if ('periodicSync' in registration) {
+                    try {
+                        const status = await navigator.permissions.query({ name: 'periodic-background-sync' });
+                        if (status.state === 'prompt') {
+                            // La permission sera demandée automatiquement lors de l'enregistrement
+                            // On essaie de l'enregistrer pour déclencher la demande
+                            try {
+                                await registration.periodicSync.register('check-notifications-periodic', {
+                                    minInterval: 60 * 60 * 1000 // Minimum 1 heure
+                                });
+                            } catch (error) {
+                                // Ignorer si la permission n'est pas accordée
+                                console.log('Periodic Background Sync non disponible:', error);
+                            }
+                        }
+                    } catch (error) {
+                        // L'API n'est pas disponible
+                        console.log('Periodic Background Sync API non disponible');
+                    }
+                }
+            } catch (error) {
+                console.log('Erreur lors de la demande de permission Periodic Sync:', error);
+            }
+        }
+    },
+    
+    async registerServiceWorker() {
         if ('serviceWorker' in navigator) {
             // Utiliser un chemin relatif pour le service worker
             const swPath = './service-worker.js';
-            navigator.serviceWorker.register(swPath).then(registration => {
-                // Enregistrer une synchronisation périodique pour vérifier les notifications
-                if ('sync' in registration) {
-                    // Enregistrer une synchronisation toutes les heures
-                    setInterval(() => {
-                        if (registration.sync) {
-                            registration.sync.register('check-notifications').catch(() => {
-                                // Ignorer les erreurs si l'API n'est pas disponible
+            try {
+                const registration = await navigator.serviceWorker.register(swPath);
+                
+                // Enregistrer Periodic Background Sync si disponible (Android Chrome)
+                if ('periodicSync' in registration) {
+                    try {
+                        const status = await navigator.permissions.query({ name: 'periodic-background-sync' });
+                        if (status.state === 'granted') {
+                            await registration.periodicSync.register('check-notifications-periodic', {
+                                minInterval: 60 * 60 * 1000 // Minimum 1 heure entre les syncs
                             });
+                            console.log('Periodic Background Sync enregistré');
                         }
-                    }, 60 * 60 * 1000); // Toutes les heures
+                    } catch (error) {
+                        console.log('Periodic Background Sync non disponible:', error);
+                    }
                 }
-            }).catch(err => {
+                
+                // Enregistrer une synchronisation en arrière-plan immédiate
+                if ('sync' in registration) {
+                    try {
+                        await registration.sync.register('check-notifications');
+                    } catch (error) {
+                        // Ignorer les erreurs si l'API n'est pas disponible
+                        console.log('Background Sync non disponible:', error);
+                    }
+                }
+                
+                // Vérifier périodiquement si on peut reprogrammer les syncs
+                setInterval(async () => {
+                    if (registration.sync) {
+                        try {
+                            await registration.sync.register('check-notifications');
+                        } catch (error) {
+                            // Ignorer les erreurs
+                        }
+                    }
+                }, 30 * 60 * 1000); // Toutes les 30 minutes
+                
+            } catch (err) {
                 // Ignorer l'erreur si on est en file:// (développement local)
                 if (window.location.protocol !== 'file:') {
                     console.error('Service Worker registration failed:', err);
                 }
-            });
+            }
         }
     },
     

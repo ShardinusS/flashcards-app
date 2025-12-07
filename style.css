@@ -676,6 +676,7 @@ header {
     box-shadow: 0 4px 16px var(--shadow);
     min-height: 300px;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
@@ -686,6 +687,11 @@ header {
     overflow-y: auto;
     overflow-x: hidden;
     transform: scale(1);
+}
+
+.card-side.has-image {
+    justify-content: flex-start;
+    padding-top: 30px;
 }
 
 .card-side:hover {
@@ -722,16 +728,18 @@ header {
 }
 
 .review-text-with-image {
-    font-size: 28px;
+    font-size: clamp(16px, 4vw, 28px);
     line-height: 1.7;
     text-align: center;
-    margin: 0 auto;
+    margin: 20px auto 0 auto;
     width: 100%;
+    max-width: 100%;
+    padding: 0 10px;
 }
 
 .review-image-container {
     width: 100%;
-    margin-bottom: 15px;
+    margin-bottom: 20px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -743,10 +751,18 @@ header {
     border-radius: 12px;
     object-fit: contain;
     box-shadow: 0 2px 8px var(--shadow);
+    display: block;
+    margin: 0 auto;
 }
 
-.review-image-container + .review-text {
-    margin-top: 15px;
+.review-image-container + .review-text,
+.review-text-with-image {
+    margin-top: 20px;
+    text-align: center;
+    width: 100%;
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .card-side.hidden {
@@ -784,10 +800,7 @@ header {
 }
 
 .review-buttons.hidden {
-    opacity: 0;
-    transform: translateY(20px);
-    pointer-events: none;
-    transition: opacity 0.3s ease, transform 0.3s ease;
+    display: none;
 }
 
 .review-btn {
