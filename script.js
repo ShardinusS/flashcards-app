@@ -3115,6 +3115,7 @@ const App = {
             });
             
             console.log('✅ Notification de test envoyée avec succès !');
+<<<<<<< HEAD
             
             // Attendre un peu avant d'afficher l'alerte pour laisser la notification s'afficher
             setTimeout(() => {
@@ -3125,6 +3126,13 @@ const App = {
             console.error('❌ Erreur lors du test de notification:', error);
             console.error('Détails:', error.stack);
             alert('❌ Erreur lors du test de notification :\n\n' + error.message + '\n\nVérifiez la console pour plus de détails (F12 > Console).');
+=======
+            alert('✅ Notification de test envoyée ! Si vous ne la voyez pas, vérifiez les paramètres de notifications de votre navigateur.');
+            
+        } catch (error) {
+            console.error('❌ Erreur lors du test de notification:', error);
+            alert('❌ Erreur lors du test de notification : ' + error.message + '\n\nVérifiez la console pour plus de détails (F12).');
+>>>>>>> 6b3d28fa36af1d5835798e5c5f80d161a876d65a
         }
     },
     
